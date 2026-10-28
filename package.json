@@ -1,0 +1,15 @@
+{
+  "name": "kb-studio",
+  "version": "1.0.0",
+  "description": "KB Studio \u2014 Personal Knowledge Base",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/build.js",
+    "deploy": "npm run build && wrangler pages deploy dist --project-name fewstepsonline",
+    "deploy:preview": "npm run build && wrangler pages deploy dist --project-name fewstepsonline --branch preview",
+    "whoami": "wrangler whoami"
+  },
+  "devDependencies": {
+    "wrangler": "^3"
+  }
+}
