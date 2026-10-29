@@ -45,10 +45,12 @@ Install development tools (Wrangler CLI for Cloudflare deployments):
 npm install
 ```
 
-### Single-File Structure
-The entire app lives in **`index.html`**. There are no duplicate HTML files to maintain:
-- **GitHub Pages:** Directly serves `index.html` from the root whenever you commit & push.
-- **Cloudflare Pages:** Deploys via `npm run deploy` (automatically bundles `index.html` into `dist/index.html` and pushes to Cloudflare).
+### Single-File Structure & Always-Mapped `notes/` Folder
+The entire app lives in **`index.html`** with an always-mapped **`notes/`** folder:
+- **`notes/` Folder:** Saved in both GitHub (committed to repo) and Cloudflare (`dist/notes/`). These markdown notes (`README.md`, `daily-notes/`, `solutions/`, `templates/`) are always visible in the explorer sidebar.
+- **Local Configured Folder:** When you select your local folder, it appears right alongside the `notes/` folder in the sidebar.
+- **GitHub Pages:** Directly serves `index.html` and `notes/` from the root whenever you commit & push.
+- **Cloudflare Pages:** Deploys via `npm run deploy` (automatically bundles `index.html` and copies `notes/` to `dist/`).
 
 ### Step 3: Run Locally (Testing)
 You can run the app locally using any static web server:

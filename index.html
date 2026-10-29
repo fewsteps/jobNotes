@@ -406,8 +406,8 @@ kbd { background: var(--bg-input); border: 1px solid var(--border); border-radiu
         </div>
         <p class="welcome-sub">A locally-running documentation framework. Open a folder to organize your notes, solutions, and bookmarks &mdash; all in Markdown. Everything stays on your machine.</p>
         <div class="welcome-actions">
-          <button class="w-btn w-btn-primary" onclick="openFolder()">&#128194; Open Folder</button>
-          <button class="w-btn w-btn-secondary" onclick="createDemo()">&#128640; Create Demo Notes</button>
+          <button class="w-btn w-btn-primary" onclick="openFolder()">&#128194; Open Local Folder</button>
+          <button class="w-btn w-btn-secondary" onclick="openMappedNote('notes/README.md')">&#128218; Browse Notes</button>
         </div>
         <div style="border-top:1px solid var(--border);padding-top:16px;width:100%;max-width:440px;margin-top:8px">
           <div style="font-size:10px;color:var(--fg-muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.08em">Keyboard Shortcuts</div>
@@ -661,6 +661,19 @@ var rootDirHandle=null, openFiles={}, activeTab=null, viewMode='edit', ctxTarget
 var currentRole=null; // 'edit' | 'view' | null
 
 // =========================================================
+// MAPPED REPOSITORY NOTES (Always mapped, saved in GitHub & Cloudflare)
+// =========================================================
+/* __MAPPED_NOTES_START__ */
+var MAPPED_NOTES = {
+  "README.md": "# 📚 My Knowledge Base\n\nWelcome to **KB Studio** — your personal, locally-running knowledge base!\n\n## Getting Started\n\n1. **Browse files** using the file tree on the left\n2. **Create new notes** with the toolbar or `Ctrl+N`\n3. **Save** with `Ctrl+S`\n4. **Switch views**: Edit, Split, or Preview\n\n## Features\n\n- ✅ Markdown rendering with live preview\n- ✅ VS Code-like file tree\n- ✅ Works completely offline\n- ✅ No installation required\n- ✅ All files stored as plain `.md` files on your disk\n\n> Everything runs in your browser. No data leaves your machine.\n",
+  "daily-notes/2024-first-note.md": "# Getting Started Notes\n\n**Date:** 2024-01-01\n**Category:** Onboarding\n\n---\n\n## Today’s Learning\n\n- Set up KB Studio knowledge base\n- Learned how to create and organize Markdown files\n- Explored VS Code-like interface in the browser\n\n## Action Items\n\n- [ ] Create a folder structure for projects\n- [ ] Add bookmarks to the links directory\n- [ ] Document first technical solution\n\n## Notes\n\nThe File System Access API in Chrome/Edge lets this app read and write files directly without a server — very useful in restricted IT environments.\n",
+  "solutions/excel-vlookup-tips.md": "# Excel VLOOKUP & XLOOKUP Tips ...\n\n**Category:** Office Productivity\n\n---\n\n## VLOOKUP Syntax\n\n```\n=VLOOKUP(lookup_value, table_array, col_index, [range_lookup])\n```\n\n- **lookup_value** — what you’re searching for\n- **table_array** — the range to search\n- **col_index** — column number to return\n- **range_lookup** — use `FALSE` for exact match\n\n## Example\n\n```\n=VLOOKUP(A2, $D$2:$F$100, 2, FALSE)\n```\n\n## Common Errors\n\n| Error | Meaning | Fix |\n|-------|---------|-----|\n| `#N/A` | Value not found | Check spelling; use IFERROR |\n| `#REF!` | Column index too high | Reduce col_index |\n| `#VALUE!` | Wrong data type | Ensure types match |\n\n## Modern Alternative: XLOOKUP (Office 365)\n\n```\n=XLOOKUP(lookup_value, lookup_array, return_array, [if_not_found])\n```\n\nMore flexible: looks left, returns multiple columns, built-in error handling.\n\n---\n*Tags: excel, office, formulas*\n",
+  "solutions/proxy-connection-fix.md": "# Fix: Corporate Proxy Connection Issue\n\n**Problem:** Browser shows `ERR_CONNECTION_REFUSED` on internal tools\n**Environment:** Windows, Corporate Network\n\n---\n\n## Symptoms\n\n- Internal web apps fail to load\n- Error code: `ERR_CONNECTION_REFUSED`\n\n## Root Cause\n\nProxy settings inherited from Internet Explorer were misconfigured.\n\n## Solution\n\n```\n1. Open: Control Panel → Internet Options → Connections → LAN Settings\n2. Check \"Use a proxy server\"\n3. Enter correct proxy address (get from IT)\n4. Click OK and restart browser\n```\n\n## Alternative (PowerShell, no admin needed)\n\n```powershell\nnetsh winhttp show proxy\nnetsh winhttp import proxy source=ie\n```\n\n**Status:** ✅ Resolved\n\n---\n*Tags: network, proxy, browser, windows*\n",
+  "templates/daily-note-template.md": "# Daily Note — [DATE]\n\n**Focus:** [Main objective for today]\n\n---\n\n## ✅ Task List\n\n- [ ] \n- [ ] \n- [ ] \n\n## 📚 Learning & Notes\n\n> Key learnings, observations, or ideas from today\n\n## 🐛 Issues Encountered\n\n| Issue | Status | Notes |\n|-------|--------|-------|\n|       |        |       |\n\n## 💡 Tomorrow’s Priorities\n\n1. \n2. \n3. \n\n---\n*Tags: daily, [project-name]*\n"
+};
+/* __MAPPED_NOTES_END__ */
+
+// =========================================================
 // AUTH — SHA-256 password protection + 24-hour session
 // =========================================================
 // Passwords are stored ONLY as SHA-256 hashes. The originals cannot be recovered.
@@ -796,16 +809,24 @@ async function verifyPermission(handle,mode){
 
 async function tryAutoOpenFolder(){
   var handle=await loadHandleFromIDB();
-  if(!handle) return;
+  if(!handle){
+    document.getElementById('tb-path-label').textContent='notes (shared)';
+    document.getElementById('sb-branch').textContent='📚 notes (shared)';
+    await renderTree();
+    return;
+  }
   var mode=currentRole==='edit'?'readwrite':'read';
   var granted=await verifyPermission(handle,mode);
   if(!granted){
     if(currentRole==='view') notify('Could not access saved folder. Contact admin.','error');
+    document.getElementById('tb-path-label').textContent='notes (shared)';
+    document.getElementById('sb-branch').textContent='📚 notes (shared)';
+    await renderTree();
     return;
   }
   rootDirHandle=handle;
   document.getElementById('tb-path-label').textContent=handle.name;
-  document.getElementById('sb-branch').textContent='\uD83D\uDCC1 '+handle.name;
+  document.getElementById('sb-branch').textContent='📁 '+handle.name;
   await renderTree();
   notify('Folder restored: '+handle.name,'success');
 }
@@ -893,12 +914,174 @@ async function openFolder(){
 async function renderTree(){
   var tree=document.getElementById('filetree');
   tree.innerHTML='';
-  if(!rootDirHandle){showEmptyTree();return;}
   var filter=document.getElementById('search-box').value.toLowerCase();
   var frag=document.createDocumentFragment();
-  await buildDir(rootDirHandle,frag,0,null,filter);
-  if(frag.childElementCount===0){showEmptyTree();return;}
+
+  // 1. Always render the mapped repository notes folder first
+  buildMappedTree(frag, filter);
+
+  // 2. Render the configured local folder
+  if(rootDirHandle){
+    var localHeader=document.createElement('div');
+    localHeader.className='tree-item folder';localHeader.dataset.path=rootDirHandle.name;localHeader.dataset.kind='directory';
+    localHeader.style.paddingLeft='8px';localHeader.style.marginTop='6px';localHeader.style.fontWeight='600';
+    localHeader.innerHTML='<span style="font-size:11px;margin-right:2px">\u25BC</span><span style="font-size:13px;margin-right:4px">\uD83D\uDCC1</span><span class="item-label" title="Configured Local Folder">'+escH(rootDirHandle.name)+'</span><span style="font-size:9px;opacity:0.65;margin-left:6px;background:rgba(255,255,255,0.08);padding:1px 5px;border-radius:3px;">local</span><div class="item-actions"><button class="item-action-btn" onclick="createNewFile()" title="New file in local folder">+&#x1F4C4;</button></div>';
+
+    var localChildren=document.createElement('div');
+    localChildren.className='tree-folder-children open';localChildren.dataset.path=rootDirHandle.name;
+
+    localHeader.addEventListener('click',function(e){
+      if(e.target.closest('.item-actions'))return;
+      var open=localChildren.classList.contains('open');
+      localChildren.classList.toggle('open',!open);
+      localHeader.querySelector('span').textContent=open?'\u25B6':'\u25BC';
+    });
+
+    await buildDir(rootDirHandle,localChildren,1,null,filter);
+    frag.appendChild(localHeader);
+    frag.appendChild(localChildren);
+  } else {
+    // If local folder not selected yet, show clean configuration box
+    var confCard=document.createElement('div');
+    confCard.style.margin='14px 8px 8px 8px';
+    confCard.style.padding='12px 10px';
+    confCard.style.background='var(--bg-active, #2a2d2e)';
+    confCard.style.border='1px dashed var(--border, #3e3e42)';
+    confCard.style.borderRadius='6px';
+    confCard.style.textAlign='center';
+    confCard.innerHTML='<div style="font-size:11px;color:var(--fg-muted, #969696);margin-bottom:8px;">Local Folder Not Connected</div><button class="open-folder-btn" onclick="openFolder()" style="width:100%;font-size:11px;padding:6px 10px;">\uD83D\uDCC1 Select Local Folder</button>';
+    frag.appendChild(confCard);
+  }
+
   tree.appendChild(frag);
+}
+
+function buildMappedTree(container, filter){
+  var keys=Object.keys(MAPPED_NOTES).sort();
+  if(keys.length===0) return;
+  if(filter){
+    keys=keys.filter(function(k){ return ('notes/'+k).toLowerCase().includes(filter); });
+    if(keys.length===0) return;
+  }
+
+  var notesHeader=document.createElement('div');
+  notesHeader.className='tree-item folder';notesHeader.dataset.path='notes';
+  notesHeader.style.paddingLeft='8px';notesHeader.style.fontWeight='600';
+  notesHeader.innerHTML='<span style="font-size:11px;margin-right:2px">\u25BC</span><span style="font-size:13px;margin-right:4px">\uD83D\uDCDA</span><span class="item-label" title="Shared Repository Notes (GitHub & Cloudflare)">notes</span><span style="font-size:9px;opacity:0.65;margin-left:6px;background:rgba(255,255,255,0.08);padding:1px 5px;border-radius:3px;">shared</span><div class="item-actions"><button class="item-action-btn" onclick="newMappedFile(event)" title="New note in notes folder">+&#x1F4C4;</button></div>';
+
+  var notesChildren=document.createElement('div');
+  notesChildren.className='tree-folder-children open';notesChildren.dataset.path='notes';
+
+  notesHeader.addEventListener('click',function(e){
+    if(e.target.closest('.item-actions')) return;
+    var open=notesChildren.classList.contains('open');
+    notesChildren.classList.toggle('open',!open);
+    notesHeader.querySelector('span').textContent=open?'\u25B6':'\u25BC';
+  });
+
+  var root={dirs:{},files:[]};
+  for(var k of keys){
+    var parts=k.split('/');
+    var fileName=parts.pop();
+    var cur=root;
+    for(var p of parts){
+      if(!cur.dirs[p]) cur.dirs[p]={dirs:{},files:[]};
+      cur=cur.dirs[p];
+    }
+    cur.files.push({name:fileName,fullRel:k});
+  }
+
+  function renderMappedDir(node, parentEl, depth, currentPath){
+    var dirNames=Object.keys(node.dirs).sort();
+    for(var d of dirNames){
+      var subPath=currentPath?currentPath+'/'+d:'notes/'+d;
+      var fld=document.createElement('div');
+      fld.className='tree-item folder';fld.dataset.path=subPath;
+      fld.style.paddingLeft=(8+depth*14)+'px';
+      fld.innerHTML='<span style="font-size:11px;margin-right:2px">\u25BC</span><span style="font-size:13px;margin-right:4px">\uD83D\uDCC1</span><span class="item-label" title="'+subPath+'">'+escH(d)+'</span>';
+
+      var ch=document.createElement('div');
+      ch.className='tree-folder-children open';ch.dataset.path=subPath;
+
+      fld.addEventListener('click',(function(childrenEl,folderEl){
+        return function(e){
+          var open=childrenEl.classList.contains('open');
+          childrenEl.classList.toggle('open',!open);
+          folderEl.querySelector('span').textContent=open?'\u25B6':'\u25BC';
+        };
+      })(ch,fld));
+
+      parentEl.appendChild(fld);
+      parentEl.appendChild(ch);
+      renderMappedDir(node.dirs[d],ch,depth+1,subPath);
+    }
+
+    node.files.sort(function(a,b){return a.name.localeCompare(b.name);});
+    for(var f of node.files){
+      var fullPath='notes/'+f.fullRel;
+      var fItem=document.createElement('div');
+      fItem.className='tree-item file';fItem.dataset.path=fullPath;
+      fItem.style.paddingLeft=(22+depth*14)+'px';
+      if(activeTab===fullPath) fItem.classList.add('active');
+      fItem.innerHTML='<span style="font-size:12px;margin-right:4px">'+getIcon(f.name)+'</span><span class="item-label" title="'+fullPath+'">'+escH(f.name)+'</span><div class="item-actions"><button class="item-action-btn" onclick="delItem(event,\''+fullPath+'\')" title="Delete">\uD83D\uDDD1\uFE0F</button></div>';
+      fItem.addEventListener('click',(function(p){
+        return function(e){ if(!e.target.closest('.item-actions')) openMappedNote(p); };
+      })(fullPath));
+      fItem.addEventListener('contextmenu',(function(p,rel){
+        return function(e){
+          e.preventDefault();
+          showCtx(e,{path:p,kind:'mapped-file',rel:rel});
+        };
+      })(fullPath,f.fullRel));
+      parentEl.appendChild(fItem);
+    }
+  }
+
+  renderMappedDir(root,notesChildren,1,'notes');
+  container.appendChild(notesHeader);
+  container.appendChild(notesChildren);
+}
+
+function openMappedNote(path){
+  if(openFiles[path]){setActiveTab(path);return;}
+  var rel=path.startsWith('notes/')?path.slice(6):path;
+  var saved=localStorage.getItem('mapped_note:'+path);
+  var content=saved!==null?saved:(MAPPED_NOTES[rel]!==undefined?MAPPED_NOTES[rel]:'');
+  openFiles[path]={
+    isMappedNote:true,
+    path:path,
+    rel:rel,
+    content:content,
+    saved:content,
+    modified:false
+  };
+  addTab(path);
+  setActiveTab(path);
+}
+
+function newMappedFile(e){
+  if(e) e.stopPropagation();
+  if(currentRole!=='edit'){notify('View-only mode.','error');return;}
+  showModal('New Note (in notes/)','my-note.md',async function(name){
+    if(!name) return;
+    if(!name.includes('.')) name+='.md';
+    var fullPath='notes/'+name;
+    var content='# '+name.replace(/\.\w+$/,'')+'\n\nStart writing here…\n';
+    MAPPED_NOTES[name]=content;
+    localStorage.setItem('mapped_note:'+fullPath,content);
+    if(rootDirHandle){
+      try{
+        var dir=await rootDirHandle.getDirectoryHandle('notes',{create:true});
+        var h=await dir.getFileHandle(name,{create:true});
+        var w=await h.createWritable();
+        await w.write(content);
+        await w.close();
+      }catch(err){}
+    }
+    await renderTree();
+    openMappedNote(fullPath);
+    notify('Created: '+fullPath,'success');
+  });
 }
 
 async function buildDir(dh,container,depth,parentPath,filter){
@@ -974,8 +1157,25 @@ async function saveCurrentFile(){
   var f=openFiles[activeTab];
   var content=document.getElementById('editor-textarea').value;
   try{
-    var w=await f.handle.createWritable();
-    await w.write(content);await w.close();
+    if(f.isMappedNote){
+      localStorage.setItem('mapped_note:'+activeTab, content);
+      MAPPED_NOTES[f.rel]=content;
+      if(rootDirHandle){
+        try{
+          var parts=activeTab.split('/');
+          var name=parts.pop();
+          var dir=rootDirHandle;
+          for(var p of parts){ dir=await dir.getDirectoryHandle(p,{create:true}); }
+          var h=await dir.getFileHandle(name,{create:true});
+          var w=await h.createWritable();
+          await w.write(content);
+          await w.close();
+        }catch(e){console.warn('Could not mirror note to local folder:',e);}
+      }
+    } else if(f.handle && f.handle.createWritable){
+      var w=await f.handle.createWritable();
+      await w.write(content);await w.close();
+    }
     f.content=content;f.saved=content;f.modified=false;
     setTabModified(activeTab,false);
     notify('Saved: '+activeTab.split('/').pop(),'success');
@@ -1123,10 +1323,14 @@ function updateWordCount(){
 // CREATE / DELETE
 // =========================================================
 async function createNewFile(){
+  if(currentRole!=='edit'){notify('View-only mode.','error');return;}
+  if(!rootDirHandle){
+    newMappedFile();
+    return;
+  }
   showModal('New File','new-note.md',async function(name){
     if(!name) return;
     if(!name.includes('.')) name+='.md';
-    if(!rootDirHandle){notify('Open a folder first','error');return;}
     try{
       var h=await rootDirHandle.getFileHandle(name,{create:true});
       var w=await h.createWritable();
@@ -1165,7 +1369,20 @@ async function newFileIn(e,parentPath){
 
 async function delItem(e,path){
   e.stopPropagation();
-  if(!confirm('Delete "'+path.split('/').pop()+'"? Cannot be undone.')) return;
+  if(currentRole!=='edit'){notify('View-only mode.','error');return;}
+  var name=path.split('/').pop();
+  if(!confirm('Delete "'+name+'"? Cannot be undone.')) return;
+  if(path.startsWith('notes/')){
+    var rel=path.slice(6);
+    delete MAPPED_NOTES[rel];
+    localStorage.removeItem('mapped_note:'+path);
+    if(openFiles[path]) delete openFiles[path];
+    var tab=document.querySelector('.tab[data-path="'+CSS.escape(path)+'"]');
+    if(tab){tab.remove();if(activeTab===path)showWelcome();}
+    await renderTree();notify('Deleted: '+name,'success');
+    return;
+  }
+  if(!rootDirHandle){notify('No local folder open','error');return;}
   try{
     var parts=path.split('/'),name=parts.pop(),dir=rootDirHandle;
     for(var p of parts) dir=await dir.getDirectoryHandle(p);
