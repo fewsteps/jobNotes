@@ -24,7 +24,7 @@ function scanNotes(dir, base = '') {
   let res = {};
   if (!fs.existsSync(dir)) return res;
   for (const item of fs.readdirSync(dir)) {
-    if (item.startsWith('.')) continue;
+    if (item.startsWith('.') || item === 'manifest.json') continue;
     const full = path.join(dir, item);
     const rel = base ? base + '/' + item : item;
     if (fs.statSync(full).isDirectory()) {
@@ -38,6 +38,15 @@ function scanNotes(dir, base = '') {
 
 const mappedNotes = scanNotes(NOTES_SRC);
 const mappedNotesJson = JSON.stringify(mappedNotes, null, 2);
+
+// Write root notes/manifest.json (for GitHub Pages serving from root)
+if (fs.existsSync(NOTES_SRC)) {
+  fs.writeFileSync(
+    path.join(NOTES_SRC, 'manifest.json'),
+    JSON.stringify(Object.keys(mappedNotes), null, 2),
+    'utf8'
+  );
+}
 
 // 2. Inject MAPPED_NOTES into index.html
 let html = fs.readFileSync(SRC, 'utf8');
