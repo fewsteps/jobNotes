@@ -148,26 +148,21 @@ Cloudflare will automatically build and deploy every time you push commits to `m
 
 ## 5. Browser Compatibility & Troubleshooting
 
-### Error: "Browser Not Supported" (File System Access API)
+### Browser Compatibility & Local Folder Connection
 
-If you see this screen:
-```text
-🚫 Browser Not Supported
-KB Studio requires the File System Access API...
-```
-
-#### If using Brave:
-Brave disables this API by default for privacy reasons. Enable it:
-1. In Brave, go to: `brave://flags/#file-system-access-api`
-2. Change the dropdown setting to **Enabled**.
-3. Click **Relaunch** at the bottom of the screen.
-4. Refresh your KB Studio tab.
-
-#### If using Firefox or Safari:
-Firefox and Safari do not implement Chromium's File System Access API. Use **Google Chrome** or **Microsoft Edge**.
-
-#### Insecure Context (HTTP):
-If hosting on a custom domain, ensure HTTPS is active. Browsers block the File System Access API on plain non-localhost `http://`.
+- **Reading & Managing Notes (All Modern Browsers):**
+  Viewing, searching, editing, and managing your shared `notes/` works in **all modern browsers** (Google Chrome, Microsoft Edge, Brave, Safari, Firefox) via built-in browser storage and HTTPS sync.
+- **Connecting a Local Disk Folder (Chrome / Edge / Brave):**
+  Direct local disk folder access uses the Chromium **File System Access API**.
+  - **Google Chrome & Microsoft Edge:** Supported out of the box.
+  - **Brave Browser:** Brave disables local disk access by default for privacy reasons. To enable:
+    1. In Brave, go to: `brave://flags/#file-system-access-api`
+    2. Change the dropdown setting to **Enabled**.
+    3. Click **Relaunch** at the bottom of the screen.
+    4. Refresh your KB Studio tab.
+  - **Firefox & Safari:** Do not implement the local File System Access API. On these browsers, you can still view, search, and edit your notes in browser storage.
+- **Secure Context Required:**
+  Browsers require a Secure Context (`https://`, `http://localhost`, or `file://`) to access local folders. GitHub Pages (`https://`) and Cloudflare Pages (`https://`) provide HTTPS automatically.
 
 ---
 
