@@ -1,6 +1,6 @@
 # KB Studio — Developer Documentation
 
-> **Purpose:** Complete reference for understanding, modifying, and scaling `knowledge-base.html`.
+> **Purpose:** Complete reference for understanding, modifying, and scaling `index.html`.
 > Written for the original author or any future developer who picks this up.
 
 ---
@@ -41,7 +41,7 @@ npm run deploy
 
 ## 1. Project Overview
 
-**KB Studio** (`knowledge-base.html`) is a zero-dependency, single HTML file that acts as a VS Code-like personal knowledge base. It runs directly in a browser with no server, no build tools, and no internet required.
+**KB Studio** (`index.html`) is a zero-dependency, single HTML file that acts as a VS Code-like personal knowledge base. It runs directly in a browser with no server, no build tools, and no internet required.
 
 ### Core Capabilities
 
@@ -68,7 +68,7 @@ The only prerequisites are a modern browser (Chrome/Edge 86+) and a local folder
 Everything lives in one `.html` file in this order:
 
 ```
-knowledge-base.html
+index.html
 |
 |-- <style>     All CSS (tokens + components + markdown styles)
 |
@@ -100,7 +100,7 @@ knowledge-base.html
 ## 3. File Structure — Single-File Anatomy
 
 ```
-knowledge-base.html  (~1135 lines, ~57 KB)
+index.html  (~1135 lines, ~57 KB)
 |
 |-- Lines   1-7    DOCTYPE, meta tags, page title
 |
@@ -1116,7 +1116,7 @@ function loadSettings() {
 > **On a locked-down Windows office laptop:**
 > Microsoft Edge ships with every Windows 10 and 11 installation.
 > No IT approval, no download, no admin rights needed.
-> Simply open Edge, drag `knowledge-base.html` onto it, and click "Allow" when prompted.
+> Simply open Edge, drag `index.html` onto it, and click "Allow" when prompted.
 
 ---
 
@@ -1171,4 +1171,4 @@ HOW TO: Split into multiple files (Phase 2)
 
 ---
 
-*Last updated: October 2026 | Version: 1.0.0 | Source: knowledge-base.html (~1135 lines, ~57 KB)*
+*Last updated: October 2026 | Version: 1.0.0 | Source: index.html (~1135 lines, ~57 KB)*
