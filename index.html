@@ -242,9 +242,30 @@ kbd { background: var(--bg-input); border: 1px solid var(--border); border-radiu
 #editor-pane.split { flex: 0 0 50%; border-right: 1px solid var(--border); }
 #editor-textarea { flex: 1; width: 100%; resize: none; background: var(--bg-editor); color: var(--fg-primary); border: none; outline: none; font-family: var(--font-mono); font-size: 14px; line-height: 1.65; padding: 20px 24px; tab-size: 2; overflow-y: auto; }
 
-#preview-pane { flex: 1; overflow-y: auto; padding: 24px 40px; background: var(--bg-editor); display: none; }
+#preview-pane { flex: 1; overflow-y: auto; padding: 24px 40px; background: var(--bg-editor); display: none; position: relative; scroll-behavior: smooth; }
 #preview-pane.visible { display: block; }
 #preview-pane.split { flex: 1; display: block; }
+
+/* TREE INDEX (OUTLINE) */
+#preview-toc { width: 250px; background: var(--bg-sidebar); border-left: 1px solid var(--border); display: none; flex-direction: column; overflow: hidden; flex-shrink: 0; user-select: none; }
+#preview-toc.visible { display: flex; }
+#btn-unhide-toc { position: sticky; top: 0; float: right; margin: -12px -24px 0 0; z-index: 20; background: var(--bg-panel); border: 1px solid var(--border); color: var(--fg-primary); border-radius: 999px; padding: 4px 10px; font-size: 11px; font-family: var(--font-ui); cursor: pointer; display: none; align-items: center; gap: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+#btn-unhide-toc:hover { border-color: var(--accent); color: var(--accent); }
+.toc-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px 6px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--fg-secondary); border-bottom: 1px solid var(--border); }
+.toc-header-btns { display: flex; gap: 2px; }
+.toc-search-wrap { padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.toc-search { width: 100%; background: var(--bg-input); border: 1px solid transparent; border-radius: var(--radius); padding: 4px 8px; color: var(--fg-primary); font-family: var(--font-ui); font-size: 12px; outline: none; }
+.toc-search:focus { border-color: var(--accent); }
+.toc-tree { flex: 1; overflow-y: auto; padding: 6px 0; font-size: 12.5px; }
+.toc-node { display: flex; align-items: center; gap: 4px; padding: 3px 8px 3px 6px; cursor: pointer; color: var(--fg-primary); white-space: nowrap; overflow: hidden; border-left: 2px solid transparent; }
+.toc-node:hover { background: var(--bg-hover); }
+.toc-node.active { background: var(--bg-selected); border-left-color: var(--accent); color: #fff; font-weight: 600; }
+.toc-toggle { width: 14px; height: 14px; display: inline-flex; align-items: center; justify-content: center; font-size: 9px; color: var(--fg-secondary); flex-shrink: 0; border-radius: 2px; }
+.toc-toggle:hover { background: rgba(255,255,255,0.12); color: var(--fg-primary); }
+.toc-label { overflow: hidden; text-overflow: ellipsis; flex: 1; }
+.toc-children { display: none; margin-left: 11px; border-left: 1px solid var(--border); }
+.toc-children.open { display: block; }
+.toc-empty { padding: 14px 12px; color: var(--fg-muted); font-size: 12px; }
 
 /* MARKDOWN STYLES */
 .md-body { max-width: 760px; margin: 0 auto; color: var(--fg-primary); font-family: var(--font-ui); font-size: 15px; line-height: 1.8; }
@@ -374,6 +395,8 @@ kbd { background: var(--bg-input); border: 1px solid var(--border); border-radiu
         <button class="toolbar-btn active" id="btn-edit" onclick="setViewMode('edit')">&#9999;&#65039; Edit</button>
         <button class="toolbar-btn" id="btn-split" onclick="setViewMode('split')">&#9707; Split</button>
         <button class="toolbar-btn" id="btn-preview" onclick="setViewMode('preview')">&#128065; Preview</button>
+        <button class="toolbar-btn" id="btn-toc" onclick="togglePreviewToc()" title="Toggle Tree Index (Outline)">&#128209; Index</button>
+        <button class="toolbar-btn" id="btn-reader-tab" onclick="openReaderTab()" title="Open distraction-free Reader View in a new browser tab">&#128214; Reader View &#8599;</button>
       </div>
       <div class="toolbar-sep"></div>
       <div class="toolbar-group" id="md-format-btns">
@@ -428,7 +451,22 @@ kbd { background: var(--bg-input); border: 1px solid var(--border); border-radiu
         <textarea id="editor-textarea" spellcheck="true" placeholder="Start writing Markdown here&hellip;"></textarea>
       </div>
       <div id="preview-pane">
+        <button id="btn-unhide-toc" onclick="togglePreviewToc()" title="Show Index">&#9664; &#128209; Show Index</button>
         <div class="md-body" id="preview-body"></div>
+      </div>
+      <div id="preview-toc">
+        <div class="toc-header">
+          <span>&#128209; Index</span>
+          <div class="toc-header-btns">
+            <button class="icon-btn" onclick="expandAllToc(true)" title="Expand All">&#8862;</button>
+            <button class="icon-btn" onclick="expandAllToc(false)" title="Collapse Sub-items">&#8863;</button>
+            <button class="icon-btn" onclick="togglePreviewToc()" title="Hide Index" style="font-size:11px;padding:2px 6px;">Hide &#9654;</button>
+          </div>
+        </div>
+        <div class="toc-search-wrap">
+          <input id="toc-search-input" class="toc-search" type="text" placeholder="Filter index..." oninput="filterPreviewToc(this.value)">
+        </div>
+        <div id="preview-toc-tree" class="toc-tree"></div>
       </div>
     </div>
   </div>
@@ -550,24 +588,29 @@ function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').rep
 function escUrl(s){ try{ s=encodeURI(decodeURIComponent(s)).replace(/%25/g,'%'); }catch(e){} return s; }
 
 var IR = {
-  escape: /^\\([!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~])/,
-  code:   /^(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)/,
-  del:    /^~~(?=\S)([\s\S]*?\S)~~/,
-  link:   /^(!?)\[([^\[\]]*)\]\(([^)]*)\)/,
-  strong: /^(\*\*|__)(?=\S)([\s\S]*?\S)\1/,
-  em:     /^(\*|_)(?=\S)([\s\S]*?\S)\1/,
-  br:     /^ {2,}\n/,
-  text:   /^[\s\S]+?(?=[\\<!\[`*~_]| {2,}\n|$)/
+  escape:   /^\\([!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~])/,
+  htmlBr:   /^<br\s*\/?>/i,
+  code:     /^(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)/,
+  del:      /^~~(?=\S)([\s\S]*?\S)~~/,
+  link:     /^(!?)\[([^\[\]]*)\]\(([^)]*)\)/,
+  url:      /^https?:\/\/[^\s<]+[^<.,:;"')\]\s]/i,
+  emStrong: /^(\*\*\*|___)(?=\S)([\s\S]*?\S)\1/,
+  strong:   /^(\*\*|__)(?=\S)([\s\S]*?\S)\1/,
+  em:       /^(\*(?=\S)([\s\S]*?\S)\*(?!\*)|_(?=\S)([\s\S]*?\S)_(?![_a-zA-Z0-9]))/,
+  br:       /^ {2,}\n/,
+  text:     /^[\s\S]+?(?=[\\<!\[`*~_]|https?:\/\/| {2,}\n|$)/i
 };
 
 function inline(src){
   var out='',cap;
   while(src){
     if(cap=IR.escape.exec(src)){src=src.slice(cap[0].length);out+=esc(cap[1]);continue;}
+    if(cap=IR.htmlBr.exec(src)){src=src.slice(cap[0].length);out+='<br>';continue;}
     if(cap=IR.code.exec(src)){src=src.slice(cap[0].length);out+='<code>'+esc(cap[2].trim())+'</code>';continue;}
     if(cap=IR.del.exec(src)){src=src.slice(cap[0].length);out+='<del>'+inline(cap[1])+'</del>';continue;}
+    if(cap=IR.emStrong.exec(src)){src=src.slice(cap[0].length);out+='<strong><em>'+inline(cap[2])+'</em></strong>';continue;}
     if(cap=IR.strong.exec(src)){src=src.slice(cap[0].length);out+='<strong>'+inline(cap[2])+'</strong>';continue;}
-    if(cap=IR.em.exec(src)){src=src.slice(cap[0].length);out+='<em>'+inline(cap[2])+'</em>';continue;}
+    if(cap=IR.em.exec(src)){src=src.slice(cap[0].length);out+='<em>'+inline(cap[2]||cap[3])+'</em>';continue;}
     if(cap=IR.link.exec(src)){
       src=src.slice(cap[0].length);
       var isImg=cap[1]==='!', lbl=cap[2], href=cap[3].trim();
@@ -575,6 +618,12 @@ function inline(src){
       var title=tm?(' title="'+esc(tm[2])+'"'):'';
       if(tm) href=tm[1].trim();
       out+=isImg?'<img src="'+escUrl(href)+'" alt="'+esc(lbl)+'"'+title+' style="max-width:100%">':'<a href="'+escUrl(href)+'"'+title+' target="_blank" rel="noopener">'+inline(lbl)+'</a>';
+      continue;
+    }
+    if(cap=IR.url.exec(src)){
+      src=src.slice(cap[0].length);
+      var u=cap[0];
+      out+='<a href="'+escUrl(u)+'" target="_blank" rel="noopener">'+esc(u)+'</a>';
       continue;
     }
     if(cap=IR.br.exec(src)){src=src.slice(cap[0].length);out+='<br>';continue;}
@@ -599,9 +648,10 @@ function hlCode(code, lang){
   return h;
 }
 
-function parse(src){
+function parse(src, usedIds){
   src=src.replace(/\r\n|\r/g,'\n').replace(/\t/g,'  ');
   var lines=src.split('\n'), i=0, n=lines.length, out='';
+  usedIds=usedIds||{};
   while(i<n){
     var line=lines[i];
     if(line.trim()===''){i++;continue;}
@@ -617,13 +667,18 @@ function parse(src){
     }
     // Heading
     var hm=line.match(/^(#{1,6})\s+(.*)/);
-    if(hm){var lv=hm[1].length,id=hm[2].toLowerCase().replace(/[^\w\s-]/g,'').replace(/\s+/g,'-');out+='<h'+lv+' id="'+id+'">'+inline(hm[2].trim())+'</h'+lv+'>';i++;continue;}
+    if(hm){
+      var lv=hm[1].length,baseId=hm[2].toLowerCase().replace(/[^\w\s-]/g,'').trim().replace(/\s+/g,'-')||'section';
+      var id=baseId;
+      if(usedIds[baseId]){usedIds[baseId]++;id=baseId+'-'+usedIds[baseId];}else{usedIds[baseId]=1;}
+      out+='<h'+lv+' id="'+id+'">'+inline(hm[2].trim())+'</h'+lv+'>';i++;continue;
+    }
     // HR
     if(/^[-*_]{3,}\s*$/.test(line)){out+='<hr>';i++;continue;}
     // Blockquote
-    if(line.startsWith('>')){var qb='';while(i<n&&lines[i].startsWith('>')){qb+=lines[i].slice(1).trimStart()+'\n';i++;}out+='<blockquote>'+parse(qb)+'</blockquote>';continue;}
+    if(line.startsWith('>')){var qb='';while(i<n&&lines[i].startsWith('>')){qb+=lines[i].slice(1).trimStart()+'\n';i++;}out+='<blockquote>'+parse(qb,usedIds)+'</blockquote>';continue;}
     // Table
-    if(i+1<n && /^\|?[-:]+[-| :]*$/.test(lines[i+1])){
+    if(i+1<n && /^\|?\s*[-:]+[-| :]*$/.test(lines[i+1])){
       var hr2=lines[i].split('|').map(c=>c.trim()).filter(c=>c!=='');i+=2;
       var tb='';
       while(i<n&&lines[i].includes('|')){
@@ -632,22 +687,48 @@ function parse(src){
       }
       out+='<table><thead><tr>'+hr2.map(h=>'<th>'+inline(h)+'</th>').join('')+'</tr></thead><tbody>'+tb+'</tbody></table>';continue;
     }
-    // List
+    // List (supports nested indentation)
     if(/^(\s*)([-*+]|\d+\.)\s/.test(line)){
-      var ord=/^\s*\d+\./.test(line),tag=ord?'ol':'ul';out+='<'+tag+'>';
+      var stack=[];
       while(i<n){
         var lm2=lines[i].match(/^(\s*)([-*+]|\d+\.)\s+(.*)/);if(!lm2)break;
+        var indent=lm2[1].length,ord=/^\d+\./.test(lm2[2]),tag=ord?'ol':'ul';
         var cnt=lm2[3],task=cnt.match(/^\[([xX ])\]\s+(.*)/);
-        if(task) out+='<li class="task-item"><input type="checkbox"'+(task[1].toLowerCase()==='x'?' checked':'')+' disabled> '+inline(task[2])+'</li>';
-        else out+='<li>'+inline(cnt)+'</li>';
+        var liHtml=task?'<li class="task-item"><input type="checkbox"'+(task[1].toLowerCase()==='x'?' checked':'')+' disabled> '+inline(task[2]):'<li>'+inline(cnt);
+        if(!stack.length){
+          stack.push({indent:indent,tag:tag});
+          out+='<'+tag+'>'+liHtml;
+        }else if(indent>stack[stack.length-1].indent){
+          stack.push({indent:indent,tag:tag});
+          out+='<'+tag+'>'+liHtml;
+        }else{
+          out+='</li>';
+          while(stack.length>1 && indent<stack[stack.length-1].indent){
+            var popped=stack.pop();
+            out+='</'+popped.tag+'></li>';
+          }
+          if(stack[stack.length-1].tag!==tag){
+            var top=stack.pop();
+            out+='</'+top.tag+'><'+tag+'>';
+            stack.push({indent:indent,tag:tag});
+          }
+          out+=liHtml;
+        }
         i++;
       }
-      out+='</'+tag+'>';continue;
+      while(stack.length){
+        var p=stack.pop();
+        out+='</li></'+p.tag+'>';
+      }
+      continue;
     }
     // Paragraph
-    var pb='';var j=i;
-    while(j<n&&lines[j].trim()!==''){pb+=lines[j]+'\n';j++;}
-    out+='<p>'+inline(pb.trim().replace(/\n/g,' '))+'</p>';i=j;
+    var pb=[];var j=i;
+    while(j<n&&lines[j].trim()!==''&&!/^(#{1,6}\s|[-*_]{3,}\s*$|>\s*|(`{3,}|~{3,})|\s*([-*+]|\d+\.)\s)/.test(lines[j])&&!(j+1<n&&/^\|?\s*[-:]+[-| :]*$/.test(lines[j+1]))){
+      pb.push(inline(lines[j].trim()));j++;
+    }
+    if(pb.length){out+='<p>'+pb.join('<br>')+'</p>';i=j;}
+    else{out+='<p>'+inline(lines[i].trim())+'</p>';i++;}
   }
   return out;
 }
@@ -667,10 +748,13 @@ var currentRole=null; // 'edit' | 'view' | null
 var MAPPED_NOTES = {
   "README.md": "# 📚 My Knowledge Base\n\nWelcome to **KB Studio** — your personal, locally-running knowledge base!\n\n## Getting Started\n\n1. **Browse files** using the file tree on the left\n2. **Create new notes** with the toolbar or `Ctrl+N`\n3. **Save** with `Ctrl+S`\n4. **Switch views**: Edit, Split, or Preview\n\n## Features\n\n- ✅ Markdown rendering with live preview\n- ✅ VS Code-like file tree\n- ✅ Works completely offline\n- ✅ No installation required\n- ✅ All files stored as plain `.md` files on your disk\n\n> Everything runs in your browser. No data leaves your machine.\n",
   "ased/ased.md": "## Revenue Manual (IRM) Part 21 (Customer Account Services)**.\n\n---\n\n## Part 1: Core Concepts & Statute Expiration Dates\n\nBefore making any account adjustments, you must understand the three primary Statute Expiration Dates (SEDs). Managing statutes is a high-priority responsibility because allowing a statute to expire incorrectly can result in an improper tax assessment or illegal refund issuance.\n\n### The Three Main Statute Expiration Dates\n\n```\n                +-----------------------------------------------+\n                |            KEY STATUTE DATES (SEDs)           |\n                +-----------------------------------------------+\n                |                                               |\n  ASED -------->| Assessment Statute Expiration Date            |\n  (3 Years)     | Limits the time IRS can ASSESS additional tax |\n                |                                               |\n  RSED -------->| Refund Statute Expiration Date                |\n  (3 Yrs/2 Yrs) | Limits the time IRS can ISSUE a refund/credit |\n                |                                               |\n  CSED -------->| Collection Statute Expiration Date            |\n  (10 Years)    | Limits the time IRS can COLLECT an unpaid balance|\n                +-----------------------------------------------+\n\n```\n\n#### 1. Assessment Statute Expiration Date (ASED)\n\n* **What it is:** The legally defined deadline by which the IRS must assess additional tax against a taxpayer.\n* **General Rule (IRC 6501):** Generally **3 years** from the date the original return was filed or the statutory due date (usually April 15), whichever is *later*.\n* **Amended Return Impact:** Filing a Form 1040-X that increases tax **does not** automatically reset or extend the standard 3-year ASED unless specific conditions apply (e.g., received within 60 days of expiration under IRC 6501(c)(7)).\n* **IRM Reference:** **IRM 21.2.4** (Statute Concepts) & **IRM 25.6** (Statute of Limitations).\n\n#### 2. Refund Statute Expiration Date (RSED)\n\n* **What it is:** The legal deadline by which a taxpayer must file a claim for a refund or credit of an overpayment.\n* **General Rule (IRC 6511):** A claim for refund must be filed within:\n* **3 years** from the time the original return was filed (or due date, whichever is later), **OR**\n* **2 years** from the time the tax was paid, whichever period expires *later*.\n\n\n* **Lookback Rule:** The amount of refund or credit the IRS can issue is limited to the tax paid within the lookback period (3 years plus extension periods, or 2 years immediately preceding the claim).\n* **IRM Reference:** **IRM 21.5.3.2** (Claims for Refund/Credit) & **IRM 25.6.1**.\n\n#### 3. Collection Statute Expiration Date (CSED)\n\n* **What it is:** The time period during which the IRS can legally collect an assessed tax debt.\n* **General Rule (IRC 6502):** Generally **10 years** from the date the tax liability was formally assessed (recorded on IDRS).\n* **Amended Return Impact:** If an amended return results in an additional tax assessment, that *new assessment* gets its own brand-new 10-year CSED clock!\n* **IRM Reference:** **IRM 21.2.4.3** & **IRM 5.1.19**.\n\n---\n\n### Special Circumstances & Statute Exceptions\n\n* **Fraud / Intentional Evasion:** No ASED limit (unlimited time to assess).\n* **Unfiled Original Returns:** The statute clock never starts until a valid original return is filed.\n* **Substantial Omission of Income:** If more than 25% of gross income was omitted, the ASED expands to **6 years**.\n* **Statute Suspensions (Tolling):** The running of statute clocks can be suspended (paused) by specific events such as **Bankruptcy**, **Offer in Compromise (OIC) processing**, **Collection Due Process (CDP) appeals**, or **Military Combat Zone service**.\n\n---\n\n## Part 2: Essential IDRS Research Tools & Freeze Codes\n\nBefore touching any numbers, you must perform full account research using the **Integrated Data Retrieval System (IDRS)**.\n\n### Top Command Codes (CC) to Learn\n\n1. **CC SUMRY:** Checks whether an account module or control base exists.\n2. **CC TXMOD (with definer \"A\"):** Displays the detailed tax module, posted Transaction Codes (TCs), pending transactions, freeze codes, and status.\n3. **CC ENMOD:** Displays entity information (name, address, TIN, filing status).\n4. **CC ADJREQ:** The primary command code used to input adjustment transactions.\n\n### Key Transaction Codes (TCs) on a Module\n\n* **TC 150:** Original Return Filed & Initial Tax Assessed.\n* **TC 290:** Additional Tax Assessed (Increase/Adjustment).\n* **TC 291:** Abatement of Tax (Decrease in liability).\n* **TC 570:** Refund Freeze / Hold applied to the module.\n* **TC 971:** Action/Information Code (e.g., indicates correspondence sent, AUR/Exam activity, or attached claim).\n\n### Common Account Freeze Codes (IRM 21.5.6)\n\nAlways check if any of these freeze codes appear on `CC TXMOD`:\n\n| Freeze Code | Name / Meaning | Action Required |\n| --- | --- | --- |\n| **`-A` Freeze** | Audit / Examination involvement | DO NOT ADJUST. Refer to Exam or hold per IRM. |\n| **`-L` Freeze** | Automated Underreporter (AUR) active | Check for active AUR (TC 922). |\n| **`-V` Freeze** | Bankruptcy proceeding | Involves Insolvency; requires special handling/approval. |\n| **`-Z` Freeze** | Criminal Investigation (CI) | **STOP IMMEDIATELY.** Do not inform taxpayer. |\n| **`-W` / `-E` Freeze** | Duplicate Return / Identity Theft | Follow ID Theft/Dup Return protocol (IRM 21.6.2). |\n\n---\n\n## Part 3: Step-by-Step Amended Return Processing Guideline\n\nFollow these **6 sequential steps** for every case assigned to you.\n\n```\n+-------------------------------------------------------------------+\n|               6-STEP AMENDED RETURN WORKFLOW                      |\n+-------------------------------------------------------------------+\n| Step 1: Verify Claim Validity & Authorization                     |\n| Step 2: Check IDRS Account Status & Freeze Codes                  |\n| Step 3: Evaluate Statute Dates (ASED & RSED)                      |\n| Step 4: Compare Original (TC 150) vs. Amended (1040-X)            |\n| Step 5: Determine Processing Category (Allow / Disallow / Hold)   |\n| Step 6: Input Adjustment (CC ADJREQ) or Escalate Case             |\n+-------------------------------------------------------------------+\n\n```\n\n### Step 1: Verify Claim Validity & Authorization\n\n1. Is the Form 1040-X signed and dated by the taxpayer(s)? *(If filing Jointly, both spouses must sign).*\n2. Is the taxpayer's identity verified (Name, SSN/ITIN, Tax Year)?\n3. Are necessary schedules/forms attached (e.g., revised Schedule C, Schedule D, or Form W-2 copies)?\n\n### Step 2: Check Account Status on IDRS\n\n1. Pull `CC TXMODA` for the tax year in question.\n2. Verify that the original return (**TC 150**) has actually posted.\n> ⚠️ **CRITICAL WARNING — Unsettled Accounts:** If the current-year return shows `00000000` in the TC 150 posted date field, the account is *unsettled*. **DO NOT ADJUST.** Reassign per IRM 21.5.2.3.\n\n\n3. Check for open controls or pending adjustments (**TC 29X**, **TC 922** for AUR, **TC 420** for Exam).\n4. Look for freeze codes (`-A`, `-L`, `-V`, `-Z`).\n\n### Step 3: Check Statute Expiration Dates\n\n1. **RSED Check (If the 1040-X requests a Refund/Decrease):**\n* Was the 1040-X received within 3 years of the original return filing date/due date OR within 2 years of the tax payment?\n* If **Expired:** The claim must be disallowed (statute-barred).\n\n\n2. **ASED Check (If the 1040-X increases Tax/Liability):**\n* Is the ASED within **90 to 180 days** of expiring? If so, follow special \"imminent statute\" procedures (IRM 25.6.1).\n\n\n\n### Step 4: Compare Original Return vs. 1040-X\n\n* Compare **Column A** (Original Amounts / Prior Adjustments) against the actual values on `CC TXMOD`/Transcript.\n* Check **Column B** (Net Change) for math errors.\n* Review **Column C** (Corrected Amounts).\n* Read the taxpayer's **Explanation of Changes** on Part II of Form 1040-X.\n\n### Step 5: Determine Adjustment Category\n\n1. **Tax Increase (Additional Tax Due):** Generally processed using **TC 290** with appropriate Reason Code.\n2. **Tax Decrease / Refund Claim:** Processed using **TC 291** (Abatement) or credit adjustments, provided RSED is open and verified.\n3. **No-Change / Informational:** If the changes cancel each other out or don't affect tax liability.\n\n### Step 6: Input Action or Reassign Case\n\n* If all criteria are met and within your authority limit: Input adjustment via `CC ADJREQ`.\n* If a hold/freeze applies or outside authority: Transfer/reassign to appropriate department or lead.\n\n---\n\n## Part 4: High-Level End-to-End Flowchart\n\n```\n                 [Receive Form 1040-X Case]\n                             |\n                             v\n                 [Step 1: Check Signature & Forms]\n                             |\n                   Is form valid & signed?\n                   /                     \\\n               (NO)                       (YES)\n                 |                          |\n    [Request Info / Reject]                 v\n                                 [Step 2: Pull CC TXMODA]\n                                            |\n                                  Is TC 150 Posted & Settled?\n                                  /                         \\\n                              (NO)                           (YES)\n                                |                              |\n                   [Hold / Wait for Settlement]                v\n                                                    Are Freeze Codes Present?\n                                                    (-A, -L, -V, -Z, etc.)\n                                                    /                    \\\n                                                (YES)                     (NO)\n                                                  |                         |\n                                       [STOP & Route/Escalate]              v\n                                                                [Step 3: Check RSED/ASED]\n                                                                            |\n                                                                   Is Claim Within Statute?\n                                                                   /                      \\\n                                                               (NO)                        (YES)\n                                                                 |                           |\n                                                       [Disallow Claim / Notice]             v\n                                                                                   [Step 4 & 5: Audit Math\n                                                                                    & Determine Category]\n                                                                                             |\n                                                                                   Within CSR Authority?\n                                                                                   /                   \\\n                                                                               (NO)                     (YES)\n                                                                                 |                        |\n                                                                        [Refer to Supervisor]   [Step 6: Input TC 290/291\n                                                                                                 via CC ADJREQ]\n\n```\n\n---\n\n## Part 5: Red Flags — When to STOP & Seek Guidance\n\nAs a new CSR, **knowing when NOT to adjust an account is just as important as knowing how to adjust one.** Immediately stop work and consult your Lead CSR, Instructor, or Manager under the following scenarios:\n\n> 🛑 **STOP AND ESCALATE IF:**\n> 1. **Statute Expiration is Imminent:** RSED or ASED expires within **90 days** (requires immediate statute control routing).\n> 2. **Audit / Exam Freeze (`-A` Freeze or TC 420/421):** The return is actively being audited. Adjusting the account will corrupt Exam's findings.\n> 3. **Criminal Investigation (`-Z` Freeze):** Never take any action or communicate with the taxpayer regarding CI accounts.\n> 4. **Automated Underreporter (`TC 922` / `-L` Freeze):** AUR has an active case for unreported income. Reassign per IRM 21.3.1.\n> 5. **Dollar Limit Exceeded:** The requested adjustment exceeds your official Accounts Management dollar-delegation authority limit.\n> 6. **Complex Tax Topics:** Involves complex foreign income/withholding (e.g., Form 1042-S), bankruptcy/insolvency (TC 604), or complex carrybacks/carryforwards.\n> 7. **Suspected Identity Theft or Fraud:** Multiple returns submitted under the same TIN with conflicting information.\n> \n> \n\n---\n\n## Part 6: Summary of Relevant IRM Sections\n\nKeep these key references handy on your desktop for quick verification:\n\n* **IRM 21.5.1:** General Adjustments Overview\n* **IRM 21.5.2:** Adjustment Guidelines & IDRS Research\n* **IRM 21.5.3:** General Claims Procedures (Form 1040-X)\n* **IRM 21.5.4:** General Math Error Procedures\n* **IRM 21.5.6:** Account Freeze Codes\n* **IRM 21.2.4:** Statute Expiration Concepts\n* **IRM 25.6.1:** Statute of Limitations Procedures\n\n---\n\n### Tip for Your First Day on the Floor:\n\nAlways use your **IAT (Integrated Automation Technologies)** tools (such as the *xMend* tool and *Code Search Index*). They will help guide your command code inputs and check for system errors automatically. Take your time, verify your command codes twice before striking Enter on `CC ADJREQ`, and never hesitate to double-check with your lead!",
+  "book/BRW4C82A9C66663_028788.md": "# IRS Reference Book\n\n**Legend**\n- IRM\n- TCD\n- Publication/ Important Job Aid\n- **IMPORTANT**\n\n**use \"Ctrl+F\" to find specific topics below:**\n\n1. IDRS Keyboard Shortcuts\n2. Transaction codes\n3. Command codes\n4. Statute Cases\n5. Unpostable Conditions\n6. CAT-A\n7. Math errors\n8. Merging accounts\n9. Reason codes\n10. Freeze codes\n11. Letters\n12. Disallowance/No Consideration\n13. Taxpayer Identification Numbers\n14. Injured spouse/ Innocent Spouse\n15. Correspondence\n16. xClaim\n17. AMS\n18. CIS\n19. Credit transfers\n20. Joint to Sept\n21. Exams\n22. Mixed periods\n23. Mixed entity\n24. MFT 29\n25. ACA\n26. Refund calls\n27. -R Freeze\n28. E-File (MeFile)\n29. Refund tracing\n30. TDS Transcripts\n31. Third Party Disclosure\n32. Regular Disclosure\n33. First Time Filers\n34. High Risk\n35. Identity Theft\n36. Deceased Taxpayers/Deceased Account Actions\n37. ITINs\n38. PATH Act\n39. W-2\n40. TPP\n41. TAS\n42. Form 4442/e-4442 Inquiry Referral\n43. Payment tracing\n44. Balance due/Penalties\n45. Collection Status\n46. AUR\n47. ASFR\n48. MFT 31\n49. ERS\n50. Economic Impact Payment (EIP)\n51. Call Flow/TIPS\n52. Import/Export Favorites\n53. Job Aids\n\n---\n\n## IDRS KEYBOARD SHORTCUTS\n\n| F1 | F2 | F3 | F4 | F5 | F6 | F7 | F8 | F9 | F10 | F11 | F12 |\n| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n| SINON | SUMRY | TXMOD | INOL | REQ54 | BMFOL | IMFOL | LETER | ENMOD | ACTON | IAGRE | SINOF |\n\n---\n\n## Transaction Codes\n\n**SUMRY, IMFOL, and TXMOD are used to research for posted transactions.**\n**Numbers ending in \"0\" indicate a manual input, other numbers are systemic.**\n*Utilize the CSI Code Search Index from the IAT tool bar to quickly verify*\n\n- **014** - Address change on ENMOD\n- **018** - Release Undeliverable refund check\n- **140** - return delinquency on account they didn't give us their tax return and we want them to\n- **150** - tax return total tax/how much they owe/return was processed\n- **161** - abatement failure to file\n- **160/166** - failure to file penalty\n- **170/176** - estimated tax penalty\n- **177** - Computer generated abatement of an ES penalty\n- **180** - failure to deposit penalty\n- **196** - interest assessed\n- **240** - Compliance assessed SRP\n- **250** - CRN 250 RC 072 for Form 8885 HCTC Health Coverage Tax Credit\n- **257** - CRN 257 Economic Impact Payment (EIP) - Qualifying Child\n- **260** - CRN 260 RC 106 Refundable Education Credit AOTC Form 8863. To allow the credit RC 106 shows as 766 on TXMODA after adjustment. 260 with a minus (-) to reduce the credit RC 106\n- **276** - failure to pay-tax penalty\n- **280** - manually computed bad check penalty\n- **290** - adjustment to TC 150 which increase tax/when decreasing credits and (increasing tax)\n- **291** - adjustment to TC 150 which decrease tax/when increasing credit and (decrease tax)\n- **300** - Exams version of a 290 (Exams made an adjustment)\n- **320** - Intent to evade tax\n- **336** - CRN 336 RC 061 Additional Child Tax Credit. Posts as TC 766\n- **338** - CRN 338 Economic Impact Payment (EIP) - Qualifying Adult\n- **370** - pulled old case from retention archives\n- **430** - Estimated Tax Payments will see it on IMFOLT or TXMOD depending on the year\n- **450** - adjustment allowing credit from Form 4136, Credit for Federal Tax Paid on Fuels\n- **460** - extension of time to file return 4868\n- **520** - Bankruptcy code (type closing code on CIS tool)\n- **540** - Deceased TP, records death of TP\n- **560** - input to extend the ASED\n- **570** - used on the credit or debit side of a credit transfer to prevent issuance of a notice or refund of a credit\n- **610** - payment made with tax return\n- **660** - Estimated Tax Payment\n- **662** - Moves all or part of an Estimated Tax Payment to a different tax period or TIN (debits the module)\n- **670** - a payment that came in with 460\n- **672** - reversal of payment of a 670\n- **700** - Credit side Manual credit transfer, 820 is debit side\n- **706** - Credit side overpayment credit Applied from Prior Tax Period, 826 is the debit side\n- **710** - Credit side of a manual credit elect transfer used to move an overpayment into the next year's tax period from the current year account\n- **716** - Computer generated credit elect applied from prior tax period\n- **740** - Undelivered Paper Refund Check Redeposited\n- **764** - CRN 764 - increasing EIC allowing EIC RC 053 and 054 for disallowing\n- **765** - CRN 765 - decreasing previously allowed EIC allowing EIC RC 053 and 054 for disallowing\n- **766** - CRN 766 - to allow the credit from Form 2439 Notice to Shareholder of Undistributed Long-Term Capital Gains (taxes paid by the Regulated Investment Company RIC or Real Estate Investment Trust REIT) RC 057\n- **767** - CRN 767 - with a minus (-) to decrease the credit from Form 2439 Notice to Shareholder of Undistributed Long-Term Capital Gains (taxes paid by the Regulated Investment Company RIC or Real Estate Investment Trust REIT) RC 057\n- **768** - EITC allowed on original return, the credit posts as a TC 768 with a minus (signifies a credit) after the amount\n- **770** - Credit interest due to the TP\n- **796** - Credit side computer generated tax offset, 896 is the debit side\n- **806** - fed tax withheld\n- **807** - CRN 807 decrease withholding (- sign after dollar amount)\n- **820** - Debit side Manual credit offset, 700 is the credit side\n- **826** - Debit side Computer generated tax offset, 706 is the credit side\n- **830** - Debit side of manual credit elect transfer used to move an overpayment from current year account to the next year's tax period when TP requested a credit elect that did not move systemically\n- **836** - money went to the next year\n- **840** - manual refund issued\n- **841** - cancelled refund\n- **844** - erroneous refund, refund sent but TP is not entitled to it\n- **846** - refund of overpayment (systemic refund) - money going out to TP (DD9 = direct deposit // DD0 = paper check)\n- **886** - IRN 886 taxable income\n- **887** - IRN 887 number of exemptions (2017 and prior)\n- **888** - IRN 888 adjusted gross income\n- **TC 896** - going to a different module like MFT number...retirement penalties shared responsibility payment, 796 is the credit side\n- **TC 898** - debt outside the IRS like child support and student loans\n- **922** - Underreporter activity (AUR) refer to 21.3.1.5.53 to see what to do\n\n### TC 971 WITH ACTION CODES\n\n- **971/CD** Amended Return went to (10,12-15& 120) CD is the action code\n- **001** - TC 150 processed to different tax period or TIN\n- **002** - TC 976/977 processed to different tax period or TIN\n- **004** - TC 150 not located, but Form 1040X or Amended Return secured and reprocessed as the original return.\n- **010** - Amended Return/claim forwarded to accounts management (To us, our case)\n- **012** - Amended Return/claim forwarded to Collection\n- **013** - Amended Return/claim forwarded to Examination\n- **015** - Amended Return/claim forwarded to Underreporter AUR\n- **017** - Identifies that the return has posted to another tax period or TIN. Input on the re-processible year\n- **071** - Injured spouse case has been received\n- **112** - input the amount of the credit claimed in the \"Freeze-release-AMT\" field when disallowing a retroactive claim for tax year 2017 and prior\n- **120** - Amended Return/claim in Submission Processing\n- **270** - Amended Return sent back to originator\n- **501** - Identity theft case initiated by taxpayer closed\n- **506** - Identity theft case discovered by IRS closed\n- **522** - Initial claim or suspicion of identity theft\n- **524** - Taxpayer deceased, account locked\n- **525** - ITIN/SSN mismatch due to Employment-related identity theft. Only the wage and income transcript will be stopped from generating\n- **696** - Ignore it\n- **804** - Letter went out\n- **976** - duplicate return\n- **977** - subsequent/Amended Return another way of saying 971 10 (the same 971 10 that posted same DLN)\n\n### Credit Reference Number after TC 971\n\n- **260** - CRN 260 to allow the credit RC 106 shows as 766 on TXMODA after adjustment\n- **260** - CRN 260 with a minus (-) to reduce the credit RC 106\n\n---\n\n## COMMAND CODES\n\n**CC SFDISP to check CC's that are assigned to your profile**\n\n- **ENMOD** - displays the most current entity information for a TP\n  - including pending charges, notices, and letters sent\n- **INOLES** - Master file entity info/valid name checks with social security/cross reference spouse info\n  - can be used for disclosure purposes.\n- **TRDBV** - researches filed returns; both electronic and paper.\n  - will show both accepted and rejected returns.\n  - only lines TP filled out are reflected.\n  - when the tax period is not used it will list every return currently accessible.\n- **RTVUE** - displays original 1040 info that shows every line\n  - will list all math errors reflected vs TXMOD only reflecting one at a time\n- **TXMODA** - all tax module information for a specific tax period on the TIF.\n  - stores the TIN, File Source, TIN Type, MFT, Tax Period, Case Control Indicator, Name Control and, for EPMF, Plan Number as required data elements for subsequent processing.\n- **DDBCK** - used for validating additional children and credits claimed on amended returns.\n  - displays the dependents & qualifying children from the original posted return or as last modified.\n  - by entering update request into DDBCK, a user can then modify the data to reflect changes from the submitted 1040X.\n- **IRPTR** - wage, income, and investment information\n- **NAMES**: used to search the national file for a TP's return not located under their TIN.\n- **INOLE**: displays the entity information as compared to the SSA or IRS Master File.\n- **IMFOLE**: displays the posted entity information.\n- **CFINK**: searches the CAF for the entity information on the taxpayer's authorized representative.\n- **ESTAB**: requests a paper processed return from files.\n- **FFINQ**: shows when the return has been input and the current status of the return.\n  - used especially when disclosing a first-time filer.\n\n---\n\n## ASED/RSED/CSED/ERSED\n## Statute Cases\n\n- 21.5.2.4.23.4 Statute Imminent Documents\n- 25.6.1.5 Basic Guide for Processing Cases with Statute of Limitations Issues\n- 25.6.1.7.2 Time When Payments and Credits are Considered to be Made\n- 25.6.1.10.2.7.2.2 Two-year Rule\n- 25.6.1.10.2.9 Claims for Credit or Refund- Taxpayers in Special Situations\n- 21.5.3.4.3 Tax Decrease and Statute Consideration\n- TCD 0071-Statute of Limitations Overview\n- TCD 0072 Assessment Statute Expiration Date (ASED)\n- TCD 0073 Collection Statute Expiration Date (CSED)\n- TCD 0074 Refund Statute Expiration Date (RSED)\n\nStatute searching a case:\n- See if the case in question is a statute year\n- Look at the ASED (if more than 90 days out, no need to continue. If 90 days or less continue!)\n- Determine how much tax is currently on the account\n  - Take the TC150 amount and add/subtract and amounts from any adjustments i.e. TC's 29X/30X/40X\n- Look at the taxpayer's claim and determine whether they are making any changes to their total tax\n  - Line 11, column C on the Form 1040X\n  - **If the number is increasing send the claim to Statutes**\n- Look at the taxpayer's claim and determine if they are making any changes to their credits\n  - Line 12-15, column C, the payment section of the Form 1040X\n  - **If the number for their credits is decreasing in comparison to what is on TXMODA, send the claim to Statutes**\n\n**Do not follow these procedures if the case is a tax increase (or credit decrease) and the ASED is within 5 days! - See IRM 25.6.1.9.9.2 & your lead/manager immediately.**\n\n1. Only cases that are process as original can be sent to statute through CIS under suspend. They can stamp the case on CIS before you submit it for processing. All other cases must be hand carried.\n2. If the case is a tax increase (or credit decrease) and the ASED is within 90 days do the following:\n3. Print the CIS case (only the first 10 pages are needed or pages most relevant to the case).\n4. Print TXMODA, IMFOLT, and ENMOD.\n5. Complete Form 10959 (it is best to complete it on the screen and print 3 copies).\n6. Attach the 3 copies of Form 10959, CIS case, and IDRS prints.\n7. Suspend your CIS case for 1 week using monitor.\n8. Update your activity on IDRS using:\n   - `ACTON`\n   - `C0?,STATUXX-XX,S` (? Will depend on which case control is yours, XX-XX is the date one week from the date of input)\n9. Give the paperwork to your designated statute runner or walk case to Statutes.\n10. If your case is not returned within 1 week, follow up with your statute runner.\n11. If the case is returned with \"KEPT\" written on the Form 10959 then leave a CASE NOTE (not case message) \"KEPT BY STATUTE\" on CIS. Input a TC 971-014. Close your CIS case.\n12. If the case is returned with other instructions follow those instructions.\n\n- **ASED** - tax increase/credit decrease assessment expiration date **within 90 days get it out to statute department so it's not barred**\n- **180 days or less forward any reinput return within 180 days of the ASED to the Statute team for clearance prior to routing to any other area.**\n- **RSED** - refund statute expiration 3 years\n- **CSED** - collection expiration date 10 years\n- **ERSED** - erroneous incorrect refund statue expiration 2 years from issuance date if IRS error or inadvertent TP error/ 5 years from refund issuance date if TP error by fraud\n\n**Expired:**\nIf there is no reply or the request for additional information is received after the requested response date and the RSED has expired, disallow the claim per IRM 21.5.3.4.3(5), Tax Decrease and Statute Consideration:\n- **Procedures:**\n  - Send certified Letter 105C and include appeal rights\n  - Input TC 290 for .00 with the appropriate reason code and blocking series 98 or 99\n  - If the original return was filed electronically, use blocking series 99 and attach TRPRT or the IMFOLR/BMFOLR print\n\n**Not expired:**\nIf there is no reply received by the requested response date and the RSED has not expired, follow the \"No Consideration\" procedures as outlined in IRM 21.5.3.4.6.3, No Consideration\n- **Procedures:**\n  - Send Letter 916C to include why the claim is not being considered\n  - Input TC 290 for .00 with appropriate reason code and blocking series\n  - DO NOT use blocking series 98 or 99\n\n**More than 90 days ASED**\nIf more than 90 days remain on the ASED, and Form 1040X is a tax increase or credit decrease, input the adjustment.\n\n**90 days or less ASED**\nIf 90 days or less remain on the ASED, and Form 1040X requires a tax increase or credit decrease, take no action on the account and the functional manager must hand carry to Statutes per IRM 25.6.1.9.9.2, After Hours and Imminent Assessments.\n\n*(CIS Update Case Data Note: WHEN UPDATING A CASE AS STATUTE SEARCHED SELECT THE CORRECT RADIO BUTTON ON CIS)*\n\n---\n\n## Unpostable Conditions\n\n- ***UPC 126-0 Gets treated differently***\n- ***25.25.6.6 is the mother IRM for all things related to Unpostable condition 126-0.***\n- 21.4.1.4.1.2.1 Unpostable Conditions\n- 21.5.5.3 Unpostables Research\n- 21.5.5.4.2.2 Unpostables Created by Your Own Adjustments\n- 21.5.5.3.3 Responding to Taxpayer Inquiries on an Open Unpostable\n- 21.5.5.3.4 Responding to Taxpayer Inquiries on a Closed Unpostable\n- TCD 0070 Unpostables: Research and Resolution\n\nA return that was received but was unable to complete processing/an adjustment, credit transfer, or entity change that is not accepted by Master File.\n- research unpostables using CC's TXMODA & ENMOD.\n- the RESULTS tool from the IAT tool bar will give you the most up to date information vs going straight to CC UPTIN\n- If you didn't cause unpostable at the most leave notes and give TP timeframe. When responding to TP determine if unpostable is open or closed look at timeframe less or more than 8 weeks. Go to IRM to see what to tell TP\n- look for the status, MFT, tax period, what cycle and date\n\n**Open Unpostable**\n- a transaction on the account did not post due to other factors/errors within the account\n- generally handled within eight cycles\n- timeframe for resolution can be extended depending on the complexity of the unpostable\n\n**Closed Unpostable**\n- someone took the appropriate action needed to close the condition that was previously causing an error\n- use the status date of the closed unpostable to determine the appropriate timeframe to respond to taxpayer inquires\n\n**How to solve unpostables:**\n1. Identifying the Unpostable\n   - (TXMODA/up history, results tool) the cause, what number is it?\n2. Researching the Unpostable\n   - (what's the status open or close and the date, what number)\n3. Resolving the Unpostable\n   - (go to timeframes job aid/IRM to see what to tell the TP)\n4. Responding to the Taxpayer\n   - Give the TP the appropriate timeframe from the IRM\n\n**Common unpostable reasons:**\n- Dates or money amounts do not match on credit transfers\n- Adjustments are input to an account with no transaction code (TC) 150 posted\n- Priority codes (PCs) are omitted\n- Amounts are reduced below zero, except adjusted gross income (AGI)\n- Errors are made in data entry\n- Payments are input on settled accounts.\n- Freeze codes are not considered\n- Pending transactions are not considered\n- Presence of certain identity theft indicators\n\n**Unpostables someone else caused:**\n- When responding to TP determine if unpostable is open or closed look at timeframe less or more than 8 weeks. Go to IRM to see what to tell TP\n\n**Unpostable YOU caused:**\n- Category code \"NLUN\" = employee created unpostable\n- What did you do to cause it?\n- Is it something you input? If that is the case the unpostable must DQ in order for you to attempt the adjustment again.\n\n---\n\n## Math Errors\n\n- 21.5.4-1 Actions on Math Error Cases\n- 21.5.4.2 General Math Error Procedures Processing\n- 21.5.4.3 What Is A Math Error\n- 21.5.4.3.1 What Is Not Considered a Math Error\n- 21.5.4.5.1 Setting the Initial Math Error\n- 21.6.3.5.1 Credit Recertification Math Errors\n- 21.5.4.5.5 Math Error Unsubstantiated Protest Processing\n- 21.5.2.4.3 Adjustments Requiring an Amended Return or Taxpayer Documentation\n\n- RTVUE and IMFOLR show all of them, TXMODA shows only one at a time\n- Substantiated Math Error = they can prove they were right/we fixed it to put it back the way it was\n- Unsubstantiated - disagree and can't prove anything *(follow 21.5.4.5.5 Math Error Unsubstantiated Protest Processing)*\n- When working telephone calls\n  - Verify the request meets Oral Statement Authority\n  - Research to ensure that the requested change is allowable\n  - Review original return information for any math error codes using CC TXMOD, CC IMFOLR, CC RTVUE, or CC TRDBV to determine what caused the original change\n  - Request and verify any missing information (e.g., use CC INOLES to validate TIN if change was due to missing qualifying dependent information).\n\n---\n\n## Merging Accounts\n\n- 21.6.2.4.1.3 ITIN to SSN Name Controls Match\n- 21.6.2.4.1.4 ITIN to SSN Name Control Mismatch\n- 21.6.2.4 TIN Related Problems Procedures\n- http://serp.enterprise.irs.gov/content/irm-supplements/itin/itin-merge-guide.html\n- htTP://fresnodirectorshipam.web.IRS.gov/Working%20on/QualityCorner/htm_files/iTINToSSNChecklist.htm\n- http://serp.enterprise.irs.gov/databases/portals/am/imf/itin.html\n\n- Don't merge if there's a TC 150 on both accounts of ITIN and social\n- Put retention cases on the TIF and make them active again IMFOLB to reinstate IMFOLT/IMFOLR to check pending status\n- Changes on ENREQ=INCHG and will show changes on ENMOD\n\n---\n\n## Reason Codes\n\n- 21.6.7.4.1.3 Reason Code (RC)\n\n**FOLLOWING REASON CODES ARE NOT USED ACCOUNTS MANAGEMENT:**\n- **32- AGI**\n- **75-TX INCOME**\n- **43-ACCOUNT INFO**\n- **49- TOTAL TAX**\n- **92- STANDARD DEDUCTIONS (VERY RARELY USED)**\n\n***IF REASON CODES LISTED ABOVE ARE SEEN ON ADJUSTMENTS, THEN WORK WILL BE TORN UP AUTOMATICALLY! PLEASE REFER TO YOUR LEAD IF YOU HAVE ANY FURTHER QUESTIONS.***\n\n- RC 099 should generally be used only if the IRM says for it to be used, under certain circumstances you can input an adjustment without a reason code.\n- Cases where there are no line items are being changed on the return do not necessarily require a reason code.\n  - Example: TC290 for $0 to release a freeze code.\n\nhtTP://fresnodirectorshipam.web.IRS.gov/Working%20on/QualityCorner/htm_files/RC_crn_TC.htm\n\nKeep in mind:\n- Math on the 1040 line = no reason code,\n- The lines that are actively changing (that are not math) use reason codes.\n- Which line is changing on the 1040?\n  - Passive changes = no reason codes\n\n---\n\n## Freeze Codes\n\n- 21.5.6.4 Freeze Code Procedures\n\n- **-AR** = Amended Return came in with a payment\n- **S-R** = Refund held because address is incorrect\n- **V-W** = Bankruptcy/Litigation\n- **-A** = Duplicate/Amended Return\n  - TC976 subsequent return (TC977), or a TC971>010 / TC971>AC 012-015 (Amended Return)\n- **C-** = Stops credit EIC and CTC from going out before Feb. 15th\n- **-D** = Adjustment made on a full paid account after the Refund Statute Expiration Date (RSED)\n- **E-** = Amended Return was submitted but we never processed an original one\n- **F-** = Frivolous return/information\n- **-G** = Math error\n- **G-** = Restricted to pay penalty\n- **-I** = Prevents computer from generating interest/penalties\n  - also, when a return was submitted, and it was missing something and we asked for the missing info\n- **K-** = Adjustment on the account with a held refund\n- **-L** = Indicates Open Exams, Exams is looking at the account.\n  - Do I need to send this to Exams? Check AMDISA for the status code and the 3-digit Primary Business Code (PBC)\n- **N-** = TP owes money\n- **P-** = Refund returned by Financial Institution(bank)\n- **-R** = TC570 sets the -R Freeze. Initiates a refund hold for:\n  - Injured Spouse\n  - unnecessary payment received\n  - IVO activity\n  - possible Identity Theft\n- **T-** = Assigned to Collections\n- **-U** = Erroneous refund\n- **-V** = Bankruptcy case\n- **-Z/Z-** = Criminal investigation\n\n---\n\n## Letters\n\n- 21.3.3.2 What is the Definition of Correspondence? – Policy Statement P-21-3 Exclusion List\n- 21.3.3.4 Correspondence Procedures\n- 21.3.3.4.2 Policy Statement P-21-3 Procedures\n- TCD 0255 Correspondence\n- htTP://fresnodirectorshipam.web.IRS.gov/Working%20on/QualityCorner/htm_files/reqcorjmc.htm\n- htTP://fresnodirectorshipam.web.IRS.gov/Working%20on/QualityCorner/htm_files/charlie.htm\n- htTP://mysbse.web.IRS.gov/examination/idrs/DLN/9993.aspx\n\nWhen sending a letter remember to:\n- **Capture** the letter in the CIS Active Case before sending the letter\n- While not required unless specifically reflected in an IRM, you can always attach the letter you sent to the case\n- If balance is on the account, you must notify taxpayer on a paper case\n  - If the balance is created by the requested adjustment the xClaim letter is sufficient\n\n- **12C** - a request for a missing Form/missing information from the return\n- **CP14** - balance due, unpaid taxes and or penalties and interest\n- **86C** - sent when we send the TP's return to a different site\n  - 21.3.3.4.2.1 Use of 86C Letter- Referring Taxpayer Inquiry/Forms to Another Office\n- **96C** - we processed your correspondence\n- **105C/106C** – disallowance letters\n  - 21.5.3.4.6.1 Disallowance and Partial Disallowance Procedures\n  - 105C used for fully disallowed claims\n  - 106C used for partially disallowed claims\n- **178C/324C** - requesting missing information\n  - 178C for unnumbered (has NO DLN) CIS cases (cases with a cis image like 1040X)\n  - 324c for numbered cases (has DLN) cases (cases with no CIS image like a DUPF)\n    - the two are NOT interchangeable\n- **2645C** generated - automatic interim letter (systematically sent out)\n- **288C** - we processed the claim as requested, we received your information and processed your request\n- **474C** – math error letter\n- **510C** - refund in error, erroneous refund\n- **549C** - to acknowledge the payment and that the account is paid in full\n- **672C** - letter sent to taxpayers to inform them of payment application\n- **916C** - \"no consideration\"\n\n---\n\n## Disallowance /No Consideration\n\n- 21.5.3.4.6 No Consideration and Disallowance of Claims and Amended Returns\n- 21.5.3.4.6.1 Disallowance and Partial Disallowance Procedures\n- 21.5.3.4.6.1.1 Disallowance Procedures When the Original Return Has Not Posted\n- 21.5.3.4.6.3 No Consideration Procedures\n- 21.6.3.5.1 Credit Recertification Math Errors\n- 21.5.3.4.6.2 Appeals and Responses to Letter 105C and Letter 106C\n- 3.11.6.11.3 Correspondence for Disallowing a Claim (Letter 105C and Letter 106C)\n\n**When a claim is disallowed it is done so because:**\n- the issue being considered is not allowable by law\n- the issue was not filed timely-unless they have a time machine, nothing can change this.\n- only disallow claims once complete research and all contacts have been made for any missing information\n\n**When a claim is partially disallowed it is done so because:**\n- the issue being considered is in part not allowable by law, but another portion of the claim is allowable\n\n**When a claim is not considered it is because:**\n- the taxpayer did not provide enough documentation to qualify for their claim\n- the taxpayer did not respond to a request for missing information\n\n---\n\n## Taxpayer Identification Numbers\n\n- 21.6.2.3 TIN-Related Problems Research\n- 21.6.7.4.2.3 TC150- Different Year or Different TIN\n\n- **ITIN** - Valid for people who can't get a SSN or ATIN. ITINs cannot get EIC\n- **SSN** - Valid\n- **ATIN** - Valid temp number for adoption, starts with 9 has 93 for middle numbers EXPIRES after 2 years\n- **IRSN** - IRS issued not valid 9-digit placeholder, fourth and fifth digits are campus number, no longer assigned when TIN is found\n\n---\n\n## Injured spouse vs Innocent spouse\n\n- 21.4.6.5.2 Injured Spouse Inquiries\n- 21.6.8.8 Inquiries/Claims\n- 21.4.6.5.9 Community Property Allocation\n- TCD 0032 Injured Spouse ≠ Innocent Spouse\n- TCD 0033 Injured Spouse Inquiry (Form 8379)\n- TCD 0034 Innocent Spouse Inquiry (Form 8857)\n- PUB 971 Innocent Spouse Relief\n- https://www.irs.gov/forms-pubs/about-publication-971\n\n- **Injured spouse**: spouse injured financially by other spouse's debt\n  - Form 8379\n- **Community Property**- Community property is property that is shared and not classified as individual. Split 50/50, the property must have been acquired by the couple during their marriage or union.\n  - States:\n    - Arizona\n    - California\n    - Idaho\n    - Louisiana\n    - Nevada\n    - New Mexico\n    - Texas\n    - Washington\n    - Wisconsin\n- **Innocent spouse**: spouse did not know about any debt\n  - Form 8857\n\n---\n\n## Correspondence\n\n- Letters that went out are reflected on TXMOD or ENMOD\n- 4 Reasons we contact Taxpayers:\n  - IRS owes TP\n  - TP owes IRS\n  - IRS needs information from TP\n  - IRS provides information to TP\n- Some situations that don't require documentation sending a letter:\n  - 21.6.4.4.1.2 Itemized Deductions-Schedule A\n  - 21.6.3.4.2.5 Notice to Shareholder of Undistributed Long-Term Capital Gains-Form 2439\n  - 21.6.3.4.1.23 Credit for Prior Year Minimum Tax Individuals, Estates, and Trusts-Form 8801\n  - 21.6.3.4.2.8.2 ACTC Adjusting the Credit-Form 8812\n\n---\n\n## xClaim\n\n- Amended claims date is needed for refunds\n- if they owe it is not needed.\n- Take out the amended claims date for TC290 for .00 (but if there is a credit then leave it)\n\n---\n\n## AMS\n\n- **Cases by TIN** - what you use to access the TP's accounts when on phones\n- **Inventory** - CIS paper cases\n- **Knowledge Center**\n  - ITLA IRM Index\n  - Training:\n    - SERP Training\n    - 6209\n    - SERP\n    - TCD\n- **Systems**\n  - ELITE\n    - Blank Forms to mail TP if they don't have access to IRS.gov/the internet.\n  - EUP\n    - Transcripts, ITIN RTS, MeFile\n  - RTR\n    - checking for payments\n- **Tools**\n  - Forms\n    - different Forms that you utilize while on the phones\n    - Inadvertent\n    - Disclosure\n    - Erroneous TP Corr\n  - Worksheets\n  - IDRS CC\n- **Profile Management**\n  - My Profile\n  - Checklist:\n    - Accounts\n  - Calendar\n  - Reports\n  - TIN Summary\n  - Web Links\n  - Release Notes\n\n---\n\n## CIS-Correspondence Imaging System\n\n- 21.5.1.5.1 CIS General Guidelines\n- 21.5.1.5.5 Processing-Reprocessing CIS Tax Returns\n- 21.5.2.4.23.2 Amended or Subsequent Return\n- 21.5.3.4.7 Processing Claims and Amended Returns With Examination Involvement\n\n**Paper Case Goals:**\n1. Make the TP's requested adjustment (if they provide the correct information)\n2. Release Freeze reflected on the account if possible (most common -A Freeze)\n3. If necessary, send letter to TP\n   - The Letter Tool from the IAT tool bar is a mandatory tool when sending letters\n4. Leave remarks for whatever adjustment/action was taken on the case\n   - **Notes** are permanent\n   - **Messages** are temporary\n\n- **Close button** – the action that fully closes the case\n- **No Action** - nothing to do anything within the account/the submitted case\n- **Close as MISC** - nothing to do anything within the account/the submitted information-most usually used with correspondence/loose forms\n- **No Action Letter (Correspondence Cases)** - Says no action was on the case/ A letter we send to without any action.\n- Link case when one case is linked to another even if it's closed\n\n---\n\n## Credit Transfers\n\n- 21.1.3.20.2 Oral Statement Documentation Requirements\n- 21.5.8.4 IDRS Guidelines for Credit Transfers\n- 21.5.8.4.7 Avoiding Credit Transfer Unpostables\n\n- Research TXMOD and IMFOLT\n- Populate the Credit Transfer Tool from the IAT tool bar\n- Each credit transfer has a \"Debit Side\"\n  - Where the credit is moved from\n- \"Credit Side\"\n  - Where the credit is moved to\n- Post credit to is where the credit is being transferred to\n- Once you've taken the needed steps for the transfer click the \"Transfer\"\n\n---\n\n## Joint to Sept:\n## MFJ to MFS, Single or HOH\n\n- 21.6.1.5.5 Married Filing Joint to Married Filing Separate, Single, or Head of Household Procedures\n- 21.6.1.5.5.1 Allowable Claims Procedures\n- TCD 0137 Filing Status (FS) - New Hire Introduction\n\n- **Joint – to sept:**\n  - Allowable if sent in before due date of the return\n  - Only allowable after the due date if marriage was invalid and TP sent needed documentation.\n  - If allowable, TP must provide allocation if there was a previously issued refund.\n  - Follow the IRM if the claim is allowable and the TP has provided the correct documentation\n  - Disallow if TP does not indicate the marriage was invalid.\n  - No consideration if TP indicates marriage was invalid and doesn't send in documentation\n- **Sept to Joint:**\n  - We do not work these!\n\n**So you need to reassign a paper case?**\n1. mark it off as statute searched\n2. go to the PAMC website\n3. select the tab labeled \"inventory\"\n4. select the link labled \"CIS Reassignment Numbers\"\n5. Follow the directions found at the top of the Word Document that pops up to correctly reassign the case\n*(And remember, DO NOT SAVE THE WORD DOCUMENT OF THE REASSIGNMENT NUMBERS, they change often and you wouldn't want to get an error!)*\n\n---\n\n## Exams\n\n- 21.5.3.4.7 Processing Claims and Amended Returns with Examination Involvement\n- 21.5.3-1 Claim Processing with Examination Involvement\n- 21.5.3-2 Examination Criteria (CAT-A) – General\n- 21.5.3-3 Examination Criteria (CAT-A) – Credits\n- 21.5.6.4.24 -L Freeze\n- 21.5.10-2 AIMS Status Code Guide - Campus Cases\n- 21.5.10.4.3 Audit Reconsiderations\n- 21.8.2.2.12 Examination Criteria\n- 21.5.10.5 W&I Accounts Management Call Transfers to Exam\n\n- If you see a -L Freeze look for the TC's\n  - TC420- Exams opening a case\n  - TC421 Exams reversed\n  - TC300 Exams has done an adjustment (their version of a TC290/291)\n\n- **Who/Where>Exam Employee Group Code (EGC) Contacts**\n- **REMEMBER DO NOT SAVE THE EXCEL SHEET AS IT IS ROUTINELY BEING UPDATED WITH NEW INFORMATION**\n\n---\n\n## Mixed Periods\n\n- 21.6.7.4.2.7.1 Mixed Periods\n- 21.6.7.4.2.7.2 Correct Year Return Posted First\n- 21.5.2.4.23.11 Reprocessing \"Dummy\" Returns\n- 21.6.7.4.2.7 Tax Period Changes\n- 21.6.7.4.2.7.3 Incorrect Year Posted First\n- 21.6.7.4.4 Duplicate or Amended Returns- TRNS36\n- TCD 0211 Mixed Periods(IMF)\n\n- Mixed period over the phone\n  - Form 4442\n\n---\n\n## Mixed Entity\n\n- 21.6.2.4.2 Mixed Entity Procedures\n- TCD 0155 Mixed Entity- Paper Procedures\n\n- 2 TP's file return with same TIN\n  - How you handle this case differs depending on if TP A or B posts first\n- **Research for determining correct TIN:**\n  - INOLES / RTVUE\n  - ENMOD / TRDBV\n  - NAMES\n  - IMFOL\n  - IRPTR\n  - TXMOD\n  - Looking for information that's wrong different names etc.\n- **Taxpayer A** - Using the right TIN, number belongs to them\n- **Taxpayer B** - Using the wrong TIN, number does not belong to them\n- **Resolving Mixed Entity Case:**\n  - **TP A posted first:** Move B to where it needs to go\n  - **TP B posted first:** If valid SSN is located for TP B account adjust TP B's account to reflect A's figures then send TP B off to the correct TIN where it's supposed to go\n  - **Invalid CN** common number has * after TIN and posts to invalid segment until we figure out where it's supposed to go.\n- **Resolving an Invalid CN Mixed Entity:**\n  - If a valid TIN is located, send the taxpayers Letter 257C.\n  - If a valid TIN is not located, inform the taxpayers via Letter 239C of their IRSN.\n  - They must use this until SSA determines their correct SSN\n\n---\n\n## MFT 29\n\n- 21.6.5.4.11.4 Processing Form 5329 With TC971 AC144\n- 21.6.5.4.11.7 Individual Retirement Account File (IRAF) Tax Adjustments\n- 21.6.5.4.11.3 Individual Retirement Account File (IRAF) Blocking Series and Source Documents\n- 21.6.5.4.11.2 Individual Retirement Account File (IRAF) Abstract Numbers\n- TCD 0162-IRAF-Adjusting Accounts Using Form 5329\n\n- Form 5329\n  - If both parts 1 and 2 are filled out then you won't have to make an MFT 29\n    - Parts 1 and 2 can be adjusted in xClaim\n    - lines 8 or 4, everything else adjust manually on REQ54\n    - 10% Early Distribution shown on Parts I and II of Form 5329 is assessed on MFT 30, not MFT 29.\n- MFT 29 In the other income section of the Form 1040/xClaim\n  - Distribution = they gave you money\n  - Contribution = you gave them money\n- What establishes MFT29 is TC 971, Action Code 144, on IMF MFT 30\n  - Do not establish an MFT 29 on such cases\n- Creating the MFT 29 module: *Paragraph 6 of 21.6.5.4.11.4*\n  - **Research:**\n    - Identify which section on 5329\n    - If it's \"other than section 1 or 2 that's when you will see if MFT 29 is established for that year on IMFOLI.\n      - Be sure to research under the correct spouse's SSN on joint returns because both can have their own MFT 29.\n    - If necessary, create MFT 29\n      - Establish MFT 29 first with TC 971 AC 144 using REQ77.\n      - Use the received date from Form 5329 as the transaction date on the REQ77 this establishes the ASED for the MFT 29\n        - 0 - Posting delay code for establishing MFT 29\n        - 3 - Posting delay code for adjustment is 3 for 3 cycles 29x adjustment gets post delay\n        - 4 - Posting delay code If there is a waiver Another adjustment is needed use REQ54 to take off that adjustment with post delay for 4 cycles\n- **Adjusting MFT 29:** *IRM 21.6.5.4.11.7*\n  - Codes you use for adjustments are different depending on which sections of the Form are changing.\n    - You can use hold codes on MFT 29, but you can't use reason or source codes.\n    - Blocking series 00 used on almost all IRAF adjustments.\n  - Instead you're going to use abstract numbers *21.6.5.4.11.2*\n    - When inputting abstract numbers, it must equal your 29x-->290 and 291.\n\n---\n\n## ACA Affordable Care Act\n\n- 21.6.3.4.2.12.6 Premium Tax Credit Amended Returns\n- 21.6.3.4.2.12.6.1 8962 PTC Calculator Response\n- 21.6.3.4.2.12.8 Failure to Reconcile Advanced Payment of the Premium Tax Credit\n- 21.6.4.4.20.3.1 Shared Responsibility Payment Adjustments\n- Form 8962/ instructions\n- Form 8965\n\n- The Affordable Care Act was put into place 2014-2018 for taxpayers who do not have a health care policy through their employer and fall within a certain income threshold.\n  - CC IRPOLA has all health care documents for specific tax periods\n  - APTC is a monthly subsidy paid directly on the premium.\n    - Advanced is what they received from the Marketplace *(gets subtracted from enrollment premium to find out how much their monthly premium was)*\n  - PTC is collected at the end of the year on the Form 1040\n  - \"PTC Exposure\" exposure amount of APTC/PTC TP received but did not reconcile.\n  - SRP Shared Responsibility Payment\n    - If you don't have minimum essential coverage.\n    - For people who don't have insurance.\n    - For people who could have gotten insurance but didn't get it.\n    - SRP accounts are MFT 35\n\n---\n\n## Refund Calls: shortcuts\n\n- **To Reissue a Paper Refund:**\n  - Verify that you CAN release the refund\n  - Input 290 for .00\n  - hold code 3\n  - Reason Code 099\n  - Also include TC 770 for the amount of the original interest credit /a TC 770 for .00 to restrict the credit interest on the adjustment\n- **TPP: Phone calls:**\n  - You cannot fix IVO, IDT or TPP.\n  - Research account and determine correct response.\n  - Refer to toll free phone number\n  - Give timeframe for a resolution\n  - Advise TP of appropriate actions to take (if any)\n\n---\n\n## -R Freeze\n\n- 21.5.6.4.35 -R Freeze\n- 21.5.6.4.35.2 Resolving the -R Freeze\n- 21.5.6.4.35.3 -R Freeze Overview for Accounts with Return Integrity Verification Operations (RIVO) Involvement\n\n***The -R Freeze simply means that the refund is being held, WHY the refund is being held is what you need to determine.***\n\n**Common Reasons for -R Freeze:**\n- Injured spouse cases\n- IVO\n- Innocent spouse\n- Multiple filer conditions\n- Missing signature\n- Payment on a satisfied account\n- Tax Return Delinquency Investigation (TDI)\n- *IRM 21.5.6.4.35 -R Freeze mother IRM will need to be referred to if ANY of the above conditions apply.*\n\n---\n\n## E-File (MeFile)\n\n- 21.2.1.39 e-file Form 1040\n- 21.2.1.54.2 Getting Started Using Free Fillable Forms\n- 21.4.1.4.1.2.3 Researching Rejected IMF E-Filed Returns\n- TCD 0053 – e-file Options For Individuals\n- Local Sites and Others \"MeF Schemas and Business Rules\"\n- http://serp.enterprise.irs.gov/databases/local-sites-other.dr/eta.dr/mef/mef-schemas-business-rules.html\n\n- CC TRDBV to search if we received return\n- If they ask if the return was rejected:\n  - Check EUP>IMF Tax Return to see why and let them know.\n  - If it was rejected it will show up highlighted in red with the reason.\n\n---\n\n## Refund Tracing\n\n- 21.4.2-1 Command Code (CC) CHKCL Input\n- 21.4.2.4 Refund Trace Actions\n- 21.4.1.5.7.1 Direct Deposit of Refunds\n- 21.4.2.4.5 Disposition Status Codes\n- 21.4.2-5 DISPOSITION AND STATUS CODES—ADDITIONAL ACTION TIMEFRAMES\n- TCD 0038 Refund Trace Process\n\n- Paper check timeframe= 4 weeks (9 weeks for foreign address) DD0 on TXMODA\n  - We can go back 7 years for a paper check refund trace.\n  - Timeframe for the refund trace is 6 weeks\n- Direct deposit was issued at least 5 calendar days prior to contact DD9 on TXMODA\n  - We can go back 6 years for a direct deposit refund trace.\n  - Ask TP \"did you contact your bank?\"\n    - Urge them to contact their financial institution before inputting a trace on the payment.\n    - Timeframe for the refund trace is 90 days\n- Verify address\n- 3911 to confirm address\n  - both spouses must sign for refund trace\n- For oral statement authority request over the phone, it's up to 12 months.\n  - After that we can do the trace but they need to send in a written request.\n- TC898 indicates an offset and could be the reason why the check wasn't received\n- If refund was Refund Anticipation Loan (RAL) or Refund Anticipation Check (RAC) refer TP to tax preparer or financial institution\n  - tax preparer is getting the money first and they need to deal with that civil matter.\n\n---\n\n## TDS Transcripts\n\n- 21.2.3 Transcripts\n- 21.2.3.5 Fulfilling Transcripts Requests\n- 21.2.3.5.9.2 IMF Transcript Ordering\n- 21.1.3.9 Mailing and ~~Faxing~~ Tax Account Information *(we do NOT fax information)*\n- MY EUP>Use TDS>Request Transcript\n- TCD 0040 Transcript\n\n- Wage and income information is only available for the current and nine prior tax years.\n- Necessary Actions when sending a transcript:\n  - Choose\n    - Contact type - Paper or phone\n    - Delivery method - Postal mail\n    - Alternate delivery method - Secure mailbox should be your default alt delivery method\n    - Date requested - If it's a phone call use current date, if it's paper use corresponding date\n    - Product type –\n      - Wage and Income\n      - Tax Return\n      - Record of Account\n      - Verification of non-filing form\n    - Use mask radio button option to protect PII\n\n---\n\n## Third Party Disclosure\n\n- 21.4.1.4.1.2 Return Found/Not Processed\n- 21.3.7.5.1 Essential Elements for Form 2848 and Form 8821\n- 21.1.3.2.3 Required Taxpayer Authentication\n- 21.1.3.3 Third Party(POA/TIA/F706) Authentication\n- TCD 0030 IMF Taxpayer Authentication\n- TCD 0094 Third Party Authorization Disclosure\n- TCD 0136 Disclosure new hire introduction\n\nDisclosure tool and CFINK\n- Look for MFT, TXYEAR, FORM\n\n- **Third Party Disclosure**\n  - Taxpayer's Name\n  - Taxpayer's TIN\n  - Third Party's Name\n  - Third Party's Number (also known as: Rep number, CAF number) see (11) below for exception\n  - Tax Period(s) in Question\n  - Tax Form(s) in Question\n\n- If the information above is correct go to *21.1.3.2.3* and ask:\n  - subparagraph **5a SSN/ 5d DOB**\n  - Third Party's SSN\n  - Third Party's Date of birth (DOB)\n\n---\n\n## Regular Disclosure\n\n- 21.1.3.2.3 Required Taxpayer Authentication\n- 21.1.1.4 Communication Skills\n- 21.1.3.2.2 Authorized and Unauthorized Disclosures\n\n- Ask:\n  - SSN\n  - Name or names as it appears on the tax return\n  - Most current mailing address\n  - Date of birth\n- If they get the name wrong let TP know you can't authenticate the account.\n- Address you can maybe ask again and high risk if they get address or date of birth DOB\n- Federal employee other than IRS you can continue disclosure as normal but if they're an IRS employee you need to fill out a Form 11377.\n\n---\n\n## First Time Filers\n**(The return has not posted yet)**\n\n- What's the TIN?\n- Verify amount of refund\n- Verify filing status on **CC FFINQ**\n- Name control and DOB on **CC INOLE**\n\n---\n\n## High Risk Disclosure\n\n- 21.1.3.2.4 Additional TP Authentication\n- 25.25.6.4 Taxpayer Protection Program (TPP) High Risk Authentication (HRA) Procedures *Paragraph 8 chart for additional questions*\n- 21.1.3.11 Potentially Dangerous Taxpayer\n\nOn the Disclosure tool:\n- **MFT 32**\n- **IDT**\n- **TPP**\n- **YOU NEED TO ASK HIGH RISK DISCLOSE THIS TAXPAYER**\n\n---\n\n## Identity Theft\n\n- 21.2.3.5.8 Transcripts and Identity Theft\n- 21.2.3.5.8.4.3 Wage and Income Transcript Identity Theft\n- PUB 5027\n- https://www.irs.gov/pub/irs-pdf/p5027.pdf\n- Form 14039\n\n- ALWAYS HRDV when you see the IDT indicator on the Disclosure tool\n- If you access the account and **FIND an IDT indicator you need** to HRDV even after completing \"regular\" disclosure.\n\n**TP calls in asking for advice on how to handle their taxes now that they are dealing with an IDT hardship, advise them to-**\n- Continue filing and paying their taxes\n- Obtain *Publication 5027* for detailed Identity Theft Information for Taxpayers\n- Provide TPs the TOLL FREE ID Theft #800-908-4490\n- If they find they cannot e-file, *Form 14039* should accompany their paper return for processing\n\n**TP calls in asking about their open/closed IDT case within the IRS**\n- On 'open' cases, **do not disclose any information unless the caller passes HRDV**\n- Do not just assume the caller is the TP\n  - If, while completing authentication and/or additional authentication, you are unable to determine that you are speaking with the true owner of the TIN, advise the caller to check their records, terminate the call and use AMS issue/narrative to leave a brief note recording the failed disclosure.\n\n---\n\n## Deceased Taxpayers/Deceased Account Actions\n\n- 21.6.6.2.20 Decedent Accounts\n- 21.1.3.4 Other Third Party Inquiries\n- 11.3.2.4.11 Deceased Individuals\n- 21.4.4-2 Manual Refund Checklists\n- TCD 0193 Deceased Account Inquiries\n- TCD 0175 Manual Refunds\n- Form 56\n- Form 1310\n- https://www.irs.gov/businesses/small-businesses-self-employed/deceased-taxpayers-getting-information-from-the-irs\n\n- If the taxpayer whose account you are accessing is dead you MUST find the information of the person you are speaking within the deceased individual's account\n  - Spouse\n  - Reflected on the second name line\n  - Power of Attorney dies with the taxpayer.\n- If the person is NOT AUTHORIZED, provide general help by referring them to the information on our website. In order to get authorized they need:\n  - The decedent's complete name/address/social security number\n  - A copy of the death certificate\n  - A copy of Letters Testamentary approved by the court OR\n  - IRS Form 56, Notice Concerning Fiduciary Relationship if there is no court ruling\n\n---\n\n## ITINs\n\n- 3.21.263.8 Accounts Management (AM) *(mother IRM for AM ITIN IRM's)*\n- 3.21.263.8.1 Disclosure Guidelines for ITIN Data\n- 3.21.263.8.3 Inquiries Regarding Status of Application\n- 3.21.263.5.1 Who Should Apply\n- 3.21.263.6.3.4.2 Reviewing Supporting Identification Documents\n- 3.21.263.2.1 How to Identify Expired/Deactivated ITINs\n- 21.6.2.4 TIN-Related Problems Procedures\n- TCD 0132 Individual Taxpayer Identification Number (ITIN) Inquiries W-7 or W-7(SP) Filed - AM Procedures for RTS\n- TCD 0133 Individual Taxpayer Identification Number (ITIN) Application Process\n- PUB 519 https://www.irs.gov/forms-pubs/about-publication-519\n- W-7/ Instructions for Form W-7\n\n**ITIN's are for tax purposes only**\n- It does not authorize an individual to work in the United States.\n- 9 digit number, Starts with a 9, middle numbers 50-65, 70-88, 90-92, 94 to 99\n- For people who can't get a SSN or ATIN\n- Not eligible for earned income credit\n- People get ITIN's by filling out the Form W-7 with your tax return\n- Austin Texas is the only place that does ITIN W-7 processing\n- If person has an ITIN and then they get a SSN they mail in the acceptance letter with their Social Security Card and never use the ITIN again.\n\n**ITIN's are NOT For:**\n- Not for work in the United States or eligibility for Social Security Benefits or Earned Income credit\n- Not for valid identification outside the tax system\n- Not for immigration status\n\n**Processing Time Frame**\n- To process ITIN 9-11 weeks (during tax season)\n- To process ITIN 7 weeks (not during tax season)\n- ITIN to get done and refund 15-17 weeks (during tax season)\n- ITIN to get done and refund 13 weeks (not during tax season)\n- Refund only 6 weeks\n- 6-11 weeks is the timeframe for the application process\n\n- **Resident Alien** - Weren't born here but now live here\n- **Non-Resident Alien** - Weren't born here and they don't live here\n\n**Who needs an ITIN?**\n- *Resident Alien – Were not born here but now live here.*\n- *Non-Resident Alien – Were not born here and they don't live here.*\n- A nonresident/resident alien individual; eligible to obtain the benefit of a reduced tax withholding rate under an income tax treaty.\n- A nonresident/resident alien individual; not eligible for an SSN who is required to file a U.S. Federal income tax return or who is filing a U.S. tax return only to claim a refund.\n- A nonresident/resident alien individual; not eligible for an SSN who elects to file a joint U.S. Federal income tax return with a spouse who is a U.S. citizen or resident.\n- An alien spouse claimed as an exemption on a U.S. Federal income tax return or a qualifying dependent that is not eligible to obtain a SSN.\n- A nonresident alien student, professor, or researcher who is required to file a United States Federal income tax return but who is not eligible for a SSN. *3.21.263.5.1 Who Should Apply*\n\n**Who's not eligible for an ITIN?**\n**Those who have a SSN or can work in the United Sates**\n- A person born in the U.S. who does not have diplomatic immunity\n- Aliens with work visas\n- Permanent legal resident of the U.S. (Green Card holder)\n- Any individual with a valid social security number\n- U.S. citizens\n\n**ITIN's Expire**\n- ITIN hasn't been used in at least once in 3 years or it's old.\n- ITIN's before 2013 will expire.\n- *IRM 3.21.263.2.1(2), How to Identify Expired/Deactivated ITINs*\n  - January 1, 2017 - 78 and 79\n  - January 1, 2018 - 70, 71, 72, and 80\n  - January 1, 2019 - 73, 74, 75, 76, 77, 81, and 82\n\n**ITIN Math Errors**\n- IRM *21.5.4.5.3, Processing Responses to Math Error Notices*\n- As long as ITIN is not expired, we can make the adjustment over the phone\n  - Check INOLES for the status. \"A\" for Active or \"I\" for inactive.\n  - Look at the ITIN REACT date, ITIN DEACT, and ITIN ASGNMT\n- If they send their tax return in with their renewal, after we process the renewal, we'll fix the math error for them automatically\n- The primary and secondary taxpayer (if filing joint) must have valid ITINs before allowing the credits. Both ITINs must be renewed\n- If the freeze (-R) is set because the primary taxpayer's ITIN was deactivated, and then the ITIN is renewed, release the freeze following *IRM 21.5.6.4.35.2, Resolving -R Freeze*\n\n### W-7 Application\n\n- Don't submit this Form if you have or you're eligible to get a SSN.\n- Getting an ITIN doesn't change your immigration status or your right to work in the United States\n- doesn't make you eligible for earned income credit\n\n**Processing Time Frame**\n- To process ITIN 9-11 weeks (during tax season)\n- To process ITIN 7 weeks (not during tax season)\n- ITIN to get done and refund 15-17 (weeks during tax season)\n- ITIN to get done and refund 13 weeks (not during tax season)\n- Refund only 6 weeks\n- 6-11 weeks application process\n\n**Application type:**\n**TP must check a box and if they don't it will default**\n- **Reasons for submitting (a,b,c,d,e,f,g,h. boxes)**\n- a,b,c,d,e,f,g, must be sent with a tax return\n- Person can't pick more than one box, just pick the most relevant one\n\n**Name must match ID's**\n\n**Signature Section**\n- The ITIN has to be signed by the applicant (the person who the W-7 ITIN is for in the Name section) or a delegate (Parent, Court-appointed guardian, or power of attorney)\n- Delegate box must be checked, and signature must be eligible for that person to check on the status of the Form W-7.\n- Court-appointed guardian and Power of attorney must submit their documentation with the W-7 cannot fax it in.\n\n**Where to get the Form W-7**\n- IRS.gov\n- Calling 1-800-TAX-FORM (1-800-829-3676)\n\n**Where do they send it?**\n- Mail it - Address is in the instructions. certified copies\n- TAC Center - Local IRS tax office can authenticate everything except school and medical records\n- Acceptance Agent (AA) Can authenticate documentation and forward to IRS\n- CAA Certified acceptance agent\n\n**Documentation**\n- ALL Documents MUST be current\n- We only accept certified copies NOT notarized\n\n**Certified Copies**\n- Someone has checked the document out and has verified it\n\n**Notarized**\n- Just means someone stamped it saying you showed up and brought it to them\n\n**Applying for W-7 for the first time (Things you will need)**\n- W-7\n- Original Tax return\n- Required Documentations (original or certified copies)\n\n**If Renewing**\n- W-7\n- Required Documentation\n  - **There are 13 types of id's you can send to the IRS**\n  - **ALL Documents MUST be current**\n    - We only accept certified copies NOT notarized\n  - **Certified Copies** - Someone has checked the document out and has verified it\n  - **Notarized** - Just means someone stamped it saying you showed up and brought it to them\n  - You need 2 types of documentation unless you are sending your passport\n  - They must establish identity and foreign status\n  - Birth certificate - If person changed their name, they need to support it with a marriage certificate for the birth certificate to be valid\n  - Student Records - Report card or transcripts\n\n**Status of ITIN Application**\n- **Notices:**\n  - CP565 Assignment Notice\n  - CP566 Suspension Notice\n    - in suspense we paused the application because it's missing information\n    - we sent a letter requesting the missing information.\n    - If they don't respond it gets rejected in 65 days\n      - If it's been suspended, we're going to look it up\n      - Tell them why it's suspended\n      - You have 45 days to send it back to us\n  - **CP567 Rejection Notice**\n    - If it's been rejected, we're going to look it up tell them why it's rejected\n    - Explain why it was rejected\n    - Tell them to send everything they sent to us again and write \"copy\" on it.\n    - if application was rejected, write copy on tax return, and new supporting documents.\n\n---\n\n## PATH ACT\n\n- 21.5.6.4.5.1 C-Freeze- Refund Holds\n- 21.4.1.3.1 PATH Act Refunds\n\n- To stop people from retroactively getting credits from amending returns.\n- After December 18, 2015 people can only get one year for the year they filed\n- Can't get the credits if you don't have ITIN or SSN issued before the due date or extended date of the return\n  - Sections 204, 205 and 206 of the PATH Act also prohibit an individual from retroactively claiming American Opportunity Tax Credit (AOTC), Earned Income Tax Credit (EITC), Child Tax Credit (CTC), Additional Child Tax Credit (ACTC) and Credit for Other Dependents (ODC), by filing an original return, amended or claim for any year in which the taxpayer, spouse or qualifying dependent did not have an ITIN or SSN issued on or before the due date or extended due date of the return.\n- This provision applies to any return or claim filed after December 18, 2015. It also applies to Amended Returns, duplicate returns and math error responses.\n- Prior to February 15th, **the refund cannot be released** if tp has any of those credits\n\n---\n\n## W-2\n\n- 21.3.6.4.7.1 Non-Receipt, Incorrect, or Loss of Form W-2, Form 1099, and Form 1098 - Information Returns\n- TCD 0057 Non-Receipt, Incorrect, or Lost Form W-2,1099,1098\n\n- Prior to February 15 don't use IAT tool Non-Receipt of W2 \"NoW2\".\n- After February 15 use the tool.\n- 63C is a notice we send to employers to let them know they have to send information to their employees\n- 4852 serves as a substitute for W-2, W2-C, or 1099-R if they don't get a W2 from their employer\n\n---\n\n## TPP\n\n- ***check for current guidelines in these IRMs always***\n- ***25.25.6.6 Non-Taxpayer Protection Program (TPP) Telephone Assistors Response to Taxpayers-anytime you see TPP GO HERE!***\n- 25.25.6-2 Manually issuing the Letter 4883C/SP, *Potential Identity Theft during Original Processing*\n- 25.25.6.6.1 Procedures for when the Caller Has Received a Taxpayer Protection Program Letter\n- 25.25.6.6.2 Procedures for when the Caller Has Not Received a Taxpayer Protection Program Letter\n- 25.25.6.6.3.2 Referring the Caller to the Taxpayer Assistance Center (TAC)- Taxpayer Protection Program (TPP) Toll-Free Assistors\n- 25.23.2.7.2.1 Taxpayers Visiting the TAC\n- 21.3.4.2.4.5.5 Taxpayer Issues that Require a TAC Visit\n- 21.4.1.4 Refund Inquiry Response Procedures\n\n**TPP Indicators**\n\n**UN 126-0**\n- TC971 > 121 / TC 972 > 129\n- TC 972 > 121 / TC 971 > 123\n- TC 971 > 124 / TC 972 > 123\n- TC 972 > 124 / TC 971 > 125\n- TC 971 > 129 / TC 971 > 052\n\n**When re-issuing the TPP letter:** *25.25.6-2 Manually issuing the Letter 4883C/SP, Potential Identity Theft during Original Processing*\n- The TPP letter may be reissued up to two times\n- In the \"TIN\" section we put an \"*\" because we don't want to send out the TIN with the letter, put in the address manually, control number is the DLN (it can be found on CC TRDBV - STAT HIST) from the return and the tax year.\n- If callers say they received a TPP letter and haven't contacted IRS yet tell them to call the number in the letter\n\n**Referring the caller to the TAC office** *25.25.6.6.3.2 Referring the Caller to the Taxpayer Assistance Center (TAC)- Taxpayer Protection Program (TPP) Toll-Free Assistors*\n- If caller can't provide verifiable address on ENMOD or TRDBV or they received 5747C advise they must call the TAC line\n  - 800-545-5640 Monday-Friday 7am-7pm local time\n  - 4883C - Potential identity Theft during original processing\n  - 5447C - Potential identity Theft Foreign Address on ENMOD or unposted return they filed\n  - 5747C - Potential identity Theft TAC AUTH only 971 ac 123 also includes 971 125 with DLN of return in the MISC field\n  - 5071C - Potential identity Theft during original processing with online option\n  - During the 2021 filing season, a pilot will be conducted with two new TPP authentication letters.\n    - The new letters will be issued from the beginning of the filing season through the end of March 2021. The account will contain the TC 971>123 with a MISC field of Letter 6330C or 6331C.\n    - The pilot letters will be issued to a limited amount of taxpayers, all other TPP taxpayers will be issued one of the regular TPP letters.\n    - If the caller was issued the Letter 6330C, employees will use the procedures for the 4883C letter.\n    - If the caller was issued the Letter 6331C, employees will use the procedures for the 5071C letter.\n    - The new pilot letters cannot be reissued, therefore the corresponding letter must be issued if the TP did not receive, misplaced/lost or did not receive the letter:\n      - 6330C letter = 4883C letter\n      - 6331C letter = 5071C letter\n\n- 800-830-5084 for U.S.A.\n- 267-941-1083 International number to call from overseas\n- *Third party callers like POA are not allowed to talk about TPP accounts*\n- Refunds with IVO involvement may have -R or P- freeze\n- Modules reviewed by RIVO usually display MISC field 005A\n  - CP05 - holding refund while we do research\n  - CP 05A - We're asking for information to see to if what we have matches\n  - If there is a -R Freeze on the account, make sure to refer to IRM *21.5.6.4.35 -R Freeze*\n\n---\n\n## TAS (e-911 AMS Form)\n\n- 13.1.7.3 TAS Case Criteria\n- 13.1.7.5 TAS Case Criteria for Economic Impact Payment (EIP) Issues\n- 21.1.3.18 Taxpayer Advocate Service (TAS) Guidelines\n- TCD 0229 TAS Advocate Service Referral Procedures\n\n- Before Referring to TAS\n  - Check to make sure time has passed\n  - If there's a TC 846 pending on TXMOD, TAS cannot expedite it any further and suggesting otherwise would be an inappropriate referral.\n- Referrals to TAS\n  - Prepare e-911 using AMS\n  - Provide TP with TAS office number 1-877-777-4778\n  - Fax 2848 or 8821 to TAS office and CAF unit\n  - Advise TP that TAS should contact them within 5 business days\n  - Advise TP to call toll-free number 1-877-777-4778 if TAS doesn't contact them within 5 business days\n  - **Once the taxpayer has been referred to TAS and TAS is actively involved, the taxpayer can only deal directly with their TAS representative as we will not be able to adjust anything within their account.**\n\n---\n\n## Form 4442/e-4442 Inquiry Referral\n\n- 21.3.5.4.1 When to Prepare a Referral\n- 21.3.5-1 Referral IRM Research List\n- 21.3.5.2.1 What is Not a Referral\n- 21.3.5.4.2.1.1 Preparing an e-4442/4442\n\n**Prepare a referral in the following circumstances:**\n- You are not trained to perform the needed resolution.\n- A subject-specific IRM section directs you to prepare Form 4442/e-4442, Inquiry Referral.\n\n**Referral Types**\n- **IRM** - referrals from guideline of IRMS\n- **In-House** - referral that were too complex for you to deal with when IDRS/AMS/Computer files online (CFOL) are down that you send to your lead or manager.\n- **Personal** - when you cannot resolve an issue immediately but can by the end of the same business day.\n  - If you don't resolve it in 24hrs it goes to your lead and becomes an In-House referral\n\n---\n\n## Payment Tracing\n\n- 21.5.7.3 Missing Payments Research\n\nQuestions to ask the taxpayer:\n- When did you send the payment in?\n- How much is the payment for?\n- How did you make the payment? Electronically or through the postal mail?\n- What kind of payment is this? *i.e. settling liability, estimated tax payment, remittance with a return*\n  - **By mail –**\n    - If payment was put in the mail and it's been less than 2 weeks, ask the taxpayer to allow a minimum of two weeks for it to post and then call back to verify receipt.\n    - If the payment was made more than 2 weeks do further research.\n  - **Electronically –**\n    - It has been less than one week, tell the taxpayer to allow a minimum of one week for it to post and then call back to verify receipt.\n    - If the payment was made more than 1 week prior do further research.\n\n**Research (TC Search tool on IAT)**\n- What type of payment?\n- What is the date and amount of payment?\n- Was the payment split and it what amounts?\n\n**Types of payments**\n- **Payments received with tax return** will have a different DLN then the return\n- **Payments received in a Taxpayer Assistance Center (TAC)** - These payments have a 13-digit remittance sequence number\n- **Lockbox payment** - TP's mail payments to lockboxes at banks\n- **Electronic payments** - payments can be made online by credit card, and through Direct Debit Installment Agreements (DDIAs)\n- **Multiple Remittance** - when two or more payments are received with one document **\"M\"** notated in the upper left margin of the document. The back of the processed check or money order is also notated to indicate the multiple remittance.\n- **Split Remittance** - payments that should be applied to more than one return document, or to more than one tax period. An **\"S\"** is notated in the upper left margin of the document. The back of the processed check or money order is notated to indicate the split remittance.\n- **Encoding Error** - an encoding error that occurs when a check is encoded with a different amount than the check was originally written for\n- **Piggyback checks** - are two attached checks that are run through the encoding machine as one\n\n**Remittance Transaction Register (RTR) Research**\n- RTR is on AMS\n- Stores check records up to 7 years\n\n**Research payments with:**\n- DLN\n- Trace id\n- Tax Period\n- Name control\n  - You **don't have the DLN or Trace ID? Deposit date and site code are needed.**\n- **Wildcards (*)** are put into fields when you don't know the full information for the fields.\n\n**Results of payment search will show**\n- Deposit date / -Transaction date\n- MFT / -DLN\n- TIN / -Tax Period\n- Name Control / -Transaction Code\n- Amount\n- Routing Number\n\n---\n\n## Balance Due/Penalties\n\nDisclaimer:\nYou are **NOT** balance due trained or certified, the following information is for **knowledge purposes only**. **DO NOT** get into conversations with taxpayers over their balances, penalties or their installment agreements. Your scope in response to any balance due issues pertains to the following:\n- verify payments made on the account\n  - the amount\n  - the date\n  - what the payment is in reference to\n- run the RCA tool if a tp requests an abatement of penalties\n- more often than not, getting them to the balance due/ Collections department\n\n- 5.1.15.16.1 Reasonable Cause Assistant (RCA)\n- TCD 0081 FTF\n- TCD 0082 FTP\n- TCD 0083 Estimated Tax Penalty\n- TCD 0085 Bad check\n\n**CP Notices = Unpaid Balance Due**\n- **XX*** - 5 weeks until next notice, collection status 19/21, Notice issued from Master File when a return or adjustment posts\n- **501** - 5 weeks until next notice, collection status 20, Second notice issued on below deferral accounts only\n- **503** - 5 weeks until next notice, collection status 56, Second notice on accounts above deferral, or third notice on below deferral accounts\n- **504** - 5 weeks until next notice, collection status 58, Final notice (certified)\n\n**FTF - Failure to file**\n- 5% if the unpaid tax for each month, or part of the month the return is late for.\n\n**FTP - Failure to pay**\n- Tax on original return is filed without being fully paid by the due date.\n\n**When a return with a balance due is filed and/or the tax is paid after the due date, it is subject to Failure to File (FTF) and Failure to Pay (FTP) penalties.**\n\n**Order in which payments are applied to their unpaid balance due**\n- Unpaid tax\n- Penalties\n- Interest\n\nUnder $100,000 you have 21 days before penalties start accruing from the day of the notice, $100,000 or more you only have 10 days from the day of the notice\n\n**Estimated Tax Penalty**\n- The lesser of 90% of current year's tax or 100% of previous year's tax whichever is less\n- **ES Payment due date**\n  - The installment due dates for calendar year taxpayers are\n    - April 15th\n    - June 15th\n    - September 15th\n    - January 15th of the following year\n\n**Form4868**\n- extension to file (6-month extension)\n- an extension to file is NOT AN EXTENSION TO PAY.\n\n**Reasonable Cause Assistant (RCA) is for FTF and FTP.**\n- FTF and FTP are the only penalties to give relief for and abate with the RCA tool.\n- Using the generated questions within the tool, determination is made on whether the penalties can be abated.\n- Oral statement authority ceiling is a threshold of how much money we can abate over the phone, if they request more than the threshold, they must write in.\n  - $1,000 per penalty and/or $2,000 per module if RCA is used.\n- First Time Penalty Abatement equates to every taxpayer getting a \"freebie.\" If they qualify for this kind of abatement, then a window will immediately populate saying that they qualify.\n- RCA can also make the determination that the penalty will be \"Sustained\" meaning they do not qualify for their penalties to be abated over the phone. The taxpayer can always submit Form 843.\n\n***Penalties and interest continue to add up on an account as long as a liability remains on the account.***\n\n---\n\n## Collection Status\n\n- 21.3.3.4.9.2.1 Compliance Criteria for Amended Returns/Claims and/or Balance Due Correspondence\n\n***22, 24, 26 Status on IDRS means it's in Collections Status and Balance Due cannot do anything on the account- an incorrect transfer to this line will result in an error!***\n\n- CC TXMODA screen you'll find status codes on the far left\n- CC IMFOLI summarizes the information on the MF for the account.\n- CC IMFOLT is comparable to CC TXMOD. CC IMFOLT provides MF information for a specific tax module\n\n**Common Collection Status Codes**\n- **12** Account is satisfied (full paid). 549c letter sent out\n- **20** Return filed and assessed; First Notice (CP 501) issued by IDRS.\n- **19/21** Return is filed and assessed. Initial Assessment Notice issued by MF (CP 14).\n- **23** Cases that are below deferral. (Still delinquent but not so much to hunt them down)\n- **56** IDRS CP 503 (3rd notice) Issued by IDRS.\n- **58** Final Notice- CP 504 issued certified mail by IDRS.\n  - Take the step to provide them with the phone number to ACS even when transferring the call for the TP\n  - Depending upon the BOD code (found on the front page of TXMOD) will determine if the account is W&I or SBSE\n    - W/I 800-829-7650 and SB/SE 800-829-3903\n    - Both lines currently are Monday-Friday, 8:00 a.m. to 8:00 p.m. their local time.\n  - Make sure the taxpayer understands the importance of contacting ACS right away to resolve the balance due.\n- **24** indicates the case has been assigned to the Resource and Workload Management System (RWMS) queue\n- **26** indicates the module may be assigned to a Revenue Officer (RO). To determine if an RO is assigned to the taxpayer, locate the Collection Assignment Number (TSIGN).\n- **71** indicates an Offer in Compromise (OIC) has been received\n\nThere are two exceptions where the status **26** accounts are not assigned to a revenue officer:\n- There is a Manually Monitored Installment Agreement (MMIA). The TSIGN will be 35XX6YYY with a history item on ENMOD identifying it as an MMIA.\n- Account contains a TSIGN of 8000, indicating the balance due is the result of an Automated Substitute for Return (ASFR).\n\n---\n\n## AUR Automated Underreporter\n\n- 21.3.1.6.53 Status of Individual Master File (IMF) Underreporter Cases\n- 21.3.1.6.56 IMF Underreporter Letters\n\n- **TC 922 indicates AUR** on the account\n- Last process code reflects the current status. Search that code in the IRM\n- AMS might have links about their AUR activity of letters they received\n  - When working phones, look at paragraph 4 for the \"If and Then\" chart\n  - When working paper cases, route by using first 2 digits of the DLN\n\nAUR is on an account if there is income discrepancy from what the taxpayer reported on their tax return and what IDRS have documented information for, usually triggering an assessment and ultimately an adjustment on the account to reflect the correct figures.\n\n---\n\n## ASFR\n\n- **Substitute for a return, they didn't file a return we do a return for them**\n- **If you see an ASFR with 150 for 0 and SFR**\n- **Fresno JOBAID>ASFR>Follow the chart line for line**\n\n- 21.3.3.4.9.2.1.2 IMF Compliance Routing (ASFR Reconsideration and Status 26)\n- Account has TC150 with transaction amount of 0 and it says \"SFR\"\n- **300** is when Exams does an adjustment\n- **420** Exams opening it's case\n- **421** Exams closed their case\n\n---\n\n## MFT 31\n\n- **21.6.8 Split Spousal Assessments (MFT 31 / MFT 65)**\n- **21.6.8.5.1 Split/Transfer Modules**\n- **21.6.8.7 Exam/Appeals/AUR MFT 31 Module Overview**\n- **21.6.8.7.1 Exam/Appeals/AUR MFT 31 Modules**\n\nTwo people who were once married who got a divorce, we create a mirrored account. This means:\n- both can make payments separately\n- they don't have to talk to each other in order to synchronize payments but have their own agreements that they agree upon\n- the accounts will reflect as one single account\n\n---\n\n## ERS\n\n- **21.4.1.4.1.2.6 Error Resolution System (ERS) Status Codes**\n- **21.4.1-1 Error Resolution System (ERS) Status Codes**\n- **21.6.3.4.2.12.4 Tools for Accessing ACA-Related Taxpayer Data**\n\n***RESULTS tool is better than ERINV***\n- Especially during our busy season, always utilize the RESULTS tool for ERS returns\n\nENMOD shows what letter, year, and paragraph TP was sent\n\n---\n\n## Economic Impact Payments (EIP)\n\n- **Fresno- Seattle- employees at the top ADP (Acct Desk Procedures)- Refund Issues- Economic Impact Payments (Under Other Refund Issues)**\n  - https://organization.ds.irsnet.gov/sites/WISAM/Seattle%20News/QA/Accounts%20Desk%20Procedures/Refunds/EIP%20Adjustments.aspx\n\n- 21.6.3.4.2.13 Economic Impact Payments\n- 21.6.3.4.2.13.1 Economic Impact Payments- Account Information\n- 21.6.3.4.2.13.2 Economic Impact Payments- Refund Inquiries\n- 21.5.3.4.17 Amended Economic Impact Payment(EIP) Return\n- TCD0296- Economic Impact Payments(EIP)\n- 13.1.7.4 TAS Case Criteria for Economic Impact Payment(EIP) Issues\n\n- IMFOLI – IMFOLT – IMFOLA will be your three main CC's when researching for the Economic Impact Payment.\n  - IMFOLI- if the tax year 2020 is active\n  - IMFOLT- you will be able to see whatever account activity is reflected\n  - IMFOLA- you will be able to see the RC's used for the adjustment for the Economic Impact Payment\n\n| Reason Code (RC) | Credit Reference Number (CRN) | Meaning |\n| :--- | :--- | :--- |\n| 200 | 338 | No payment due to AGI phase-out |\n| 201 | 338 | No payment due to the taxpayer being claimed on another return (TC 971 AC 199 may reflect \"DSI\") or someone can claim you/spouse as a dependent box checked. |\n| 202 | 338 | No payment due to TIN issues (an invalid primary or secondary SSN, invalid due to assignment date, and ITIN) (A TC 971 AC 166 in the entity identifies SSNs issued for non-work purposes) |\n| 203 | 338 | No payment due to the filing of Form 1040-NR, Form 1040-PR, or Form 1040-SS |\n| 205 | 338 | Systemic catch-all for when a payment cannot be issued, such as refund less than $1 and SSA/RRB deceased individual<br>**NOTE:** RC 205 is also used when the payment was previously considered (including an amount for zero) and could be reduced or eliminated. For example, a single taxpayer received $1,200 based on a 2018 return, then a 2019 joint return is filed (the 2019 payment amount is reduced by the amount previously paid for 2018). |\n| 206 | 338 / 257 | Payment reduced due to AGI phase-out |\n| 207 | 338 | Deceased taxpayer, payment issued to surviving spouse **(systemic use only)** |\n| 209 | 338 | Taxpayer qualifies for $1,200 / $2,400 |\n| 211 | 257 | - dependent 17 or over as of January 1, 2020<br>- date of death prior to 2019<br>- non-qualifying relationship present<br>- dependent has an ITIN |\n| 213 | 257 | All claimed children qualify (those children who qualified for CTC based on the return as processed, plus those kids with an ATIN shown in the first four dependents position of the return) |\n| 215 | 338/257 | EIP attributable to only the primary taxpayer |\n| 216 | 338/257 | EIP attributable to only the secondary taxpayer |\n\n*IRM 21.6.3.4.2.13.1 Economic Impact Payments - Account Information*\n\n---\n\n## Call Flow/ Tips\n\n| The Six Step Process | Action |\n| :--- | :--- |\n| 1. Greet the taxpayer | - Identify yourself<br>- Indicate willingness to help |\n| 2. Respond to the taxpayer's opening statement | - Actively listen to taxpayer<br>- Deal with taxpayer's feelings, if appropriate<br>- Acknowledge that you will help |\n| 3. Target the taxpayer's question | - Inquire and paraphrase the issue back to the taxpayer<br>- Gain agreement from taxpayer |\n| 4. Get the necessary facts | - Ask the right questions to get the information necessary to answer the inquiry<br>- Use purpose statements prior to gathering information from the taxpayer |\n| 5. Provide assistance | - Provide accurate and complete information<br>- Explain any procedures<br>- Order necessary forms/publications<br>- Appropriately refer taxpayer to another resource, if required |\n| 6. Close the conversation | - Verify taxpayer's understanding<br>- Conclude contact courteously<br>- Apologize if IRS made an error |\n\n| Techniques for Building Rapport | The Impact on Call: |\n| :--- | :--- |\n| **Workplace preparation** | • clutter-free, comfortable, and cheerful work environment – promotes a positive attitude<br>• be prepared to take notes |\n| **Posture** | • influences energy level<br>– if you slouch your energy level decreases and you become less focused on the taxpayer<br>– sit up straight, but not so straight that you are uncomfortable — you will be less tired by the end of the day<br>*\\*remember to stand and stretch every so often as well!* |\n| **Attitude** | • a positive attitude<br>– heightens your energy level<br>– strengthens your credibility<br>– extends to your taxpayer<br>• a negative attitude<br>– puts the taxpayer on the defensive<br>– makes your job more difficult |\n| **Energy level** | • when you sound energetic, your tone will attract the taxpayer's interest and show them that you are just as invested in the outcome of your interaction. |\n| **Smile** | • you will be less irritated and more energetic<br>– it will come across in your tone of voice<br>– promotes friendlier conversation |\n| **Tone of voice** | • hear yourself as taxpayers do - aim to sound upbeat, understanding, clear, direct, natural, and remain in control.<br>• talk in a lower pitch to sound more confident and professional.<br>• you will alienate the taxpayer if you seem:<br>– apathetic (indifferent)<br>– phony (fake)<br>– rushed (talking fast)<br>– hesitant *(control is key in any interaction)*<br>– irritated |\n\n---\n\n## Import/Export Favorites\n\n- Follow these instructions to import a Favorites list that has been exported. (An exported Favorites list is named bookmark.html by default)\n  - In Internet Explorer click on the File menu at the top and then select Import and Export\n  - The Import/Export Wizard opens. If not already selected, click Import from file then click Next\n  - click Favorites and then click the Next button.\n  - Use the Browse... button to choose the bookmark file you want to import (located on your \"I\" drive called bookmark.html).\n  - Select the bookmark file and click the Open button. The path to it will appear in the Import from a File or Address box. Click the Next button.\n  - The Import Favorites Destination Folder window opens with Favorites already selected. Click the Import button.\n  - The Completing the Import/Export Wizard window opens. Click the Finish button.\n- Exporting your Favorites list will copy them to a file, named \"bookmark.html\". This file will be the one you will later import into your favorites list in Explorer on your new computer.\n  - In Internet Explorer click on the File menu at the top and then select Import and Export\n  - Select Export to a file and then click the Next button.\n  - Select Favorites and then click the Next button.\n  - The Export Favorites Source Folder window opens and Favorites is already selected. Click the Next button.\n  - The Export Favorites Destination window opens. Click the **Browse** button to select a destination for your exported Favorites. Select your \"I\" drive, click on the save button then select **Export**. (if you get a dialog box asking you to replace an existing file select Yes).\n  - A window opens with the message You have successfully exported these settings. Click the Finish button and you are done.\n  - Open your \"I\" drive and you should see a file `___bookmark.html`.\n\nNewHireFavorites_MarkY.htm\n\n---\n\n## Job Aids\n\n- 8962 PTC CALC AID (Courtesy of Austin).\n- 10959EXAMPLE_NH.pdf\n- AMS_HOTLISTGUIDE_NH.pdf\n- APPEALS_CHKLST_NH.pdf\n- Form1725_NH.pdf\n- Form11122_STATUTECERT_NH.pdf\n- SETRCODES_NH.pdf\n- statutesflowchart_NH.pdf\n- STEP BY STEP WORKING ON CASE.\n- Filing Status Breakdown.docx\n- processasOG_NH.docx\n- Payment Annotation.docx\n- CC_MANUAL INPUT.docx\n\n---\n\n*Elizabeth K. Hughes*\n\n",
+  "cheatSheets/xMend.md": "### TRANSACTION CODES\n\n* **290:** Increase tax (+)\n* **291:** Decrease tax (-)\n* **160:** Increase FTF penalty (+) [Failure to File penalty]\n* **161:** Decrease FTF penalty (-) [Estimated Tax penalty]\n* **170:** Increase ES penalty (+) \n* **171:** Decrease ES penalty (-)\n* **270:** Increase FTP penalty (+) [- freeze] [Failure to Pay penalty = underpaying estimated quarterly tax payments]\n* **271:** Decrease FTP penalty (-) [- freeze]\n* **340:** Increase debit interest (+) [- freeze]\n* **341:** Decrease debit interest (-) [- freeze]\n* **770:** Increase credit interest (+) [- freeze]\n* **771:** Decrease credit interest (-) [- freeze]\n\n---\n\n### REFERENCE NUMBERS\n\n* **336:** Additional Child Tax Credit F8812 (+/-)\n* **764:** Increase EITC (+)\n* **765:** Decrease EITC (-)\n* **766:** Form 2439, Form 4136, Offset Reversal (+)\n* **767:** Forms 2439 Form 4136 (-)\n* **806:** Increase withholding (-)\n* **807:** Decrease withholding (-)\n* **808:** Primary Injured Spouse Refund\n* **809:** Secondary Injured Spouse Refund\n* **678:** Primary Self-Employment Income (+/-)\n* **879:** Secondary Self-Employment Income (+/-)\n* **883:** Non-Conventional Fuels Credit (+/-)\n* **884:** Alcohol Fuels Credit (+/-)\n* **885:** Advanced EITC (+/-)\n* **886:** Taxable Income (+/-)\n* **887:** Personal Exemptions (+/-)\n* **888:** Adjusted Gross Income (+/-)\n* **889:** Self-Employment Tax (+/-)\n* **891:** Primary Unreported Tip Income (+/-)\n* **892:** Secondary Unreported Tip Income (+/-)\n* **895:** Primary Medicare Income (+/-)\n* **896:** Secondary Medicare Income (+/-)\n* **898:** Primary Medicare Tip Income (+/-)\n* **899:** Secondary Medicare Tip Income (+/-)\n\n---\n\n### BLOCKING SERIES\n\n* **00:** Adjustment documents includes original TC 150. Becomes new controlling DLN.\n* **05:** Normal, Non-refile, No TC 150, not controlling DLN.\n* **18:** Refile, Becomes Controlling DLN. Pulls TC 150.\n* **77:** Set Math Error (-G). Includes original TC 150.\n* **78:** Set Math Error, Becomes Controlling. Pulls TC 150.\n* **98:** Disallowance, Becomes Controlling. Pulls TC 150.\n* **99:** Disallowance, Includes original TC 150.\n\n---\n\n### SOURCE CODES\n\n* **0:** Suppressed, nothing prints on the notice.\n* **1:** As you requested, we changed your account...\n* **2:** We changed your account to correct your...\n* **3:** Because of recent tax law changes, we changed...\n* **4:** We changed your return to correct IRS error...\n* **5:** We changed your return requested carryback...\n* **6:** You made a mistake; we corrected the error...\n* **7:** All or part of your refund offset is being reversed...\n\n---\n\n### PRIORITY CODES\n\n* **1:** Used with a -L freeze and when both PC 1 and PC 8 are needed.\n* **3:** IRS initiated adjustment when considering the 45-day interest free period.\n* **5:** Use with TC 290.00 to force post accruals of unrestricted FTP penalty and/or interest.\n* **6:** Use to release math error freeze (-G) when TP agrees to math error.\n* **7:** Use to set unsubstantiated math error protest freeze to send to Exam.\n* **8:** Use when inputting an adjustment within $10 of a prior adjustment; When EITC is increased and prior TC 290 on account; or When adjusting withholding and a TC 17X is posted.\n\n---\n\n### TRANSACTION CODE 971 ACTION CODES (Trans Date)\n\n* **001:** TC150 to another tin/tax period (RRD)\n* **002:** Amended/duplicate to another tin/tax period (23C date of 976/977)\n* **003:** Reinput return from wrong tin/tax period\n* **010:** Amended return forwarded to Adjustments\n* **011:** Non-receipt of refund check\n* **013:** Amended return forwarded to Exam\n* **014:** Amended return forwarded to Statute\n* **015:** Amended return forwarded to AUR\n* **017:** For cross-reference, indicating that a return has posted to another TIN/MFT/TXPD (Receive dt of return)\n* **030:** TC 848/849 refund reversal xref (23C date of 846/840)\n* **035:** Failure to Pay 1% trigger\n* **037:** Manual Refund Cross Reference TIN or Address\n* **043:** Pending installment agreement\n* **063:** New installment agreement\n* **071:** DMF injured spouse claim (receive date of claim)\n* **112:** AOTC, CTC, or EITC retroactive claims - allowed or disallowed\n* **262:** Maximum Failure to Pay Penalty assessed\n* **270:** Incomplete claim returned to taxpayer (date of claim)\n* **522:** ID theft Initial allegation/suspicion OR documentation rec'd\n* **501:** ID theft TP identified and impact on tax administration\n* **504:** ID theft TP identified and tax impact is unknown\n* **505:** ID theft IRS notified the taxpayer of data loss incident\n* **506:** ID theft IRS identified and impact on tax administration\n\n---\n\n### TRANSACTION CODE 971 ACTION CODES FOR TPP & AQC\n\n* **TPP: Taxpayer Protection Program - IRM 25.25.6**\n* **111:** Return w/ matching DLN identified as IDT and moved to MFT 32\n* **121:** Potential IDT case selected by TPP before return posts (used prior to 2017)\n* **123:** Used by RIVO to give more information (TPP letter, etc.)\n* **124:** Potential IDT case selected by TPP before return posts (used 2017 to present)\n* **129:** Potential IDT case selected by TPP after return posts\n\n\n* **AQC: Automated Questionable Credit Program - IRM 25.25.7**\n* **122:** Selected for review after posting for withholding and/or credits\n* **128:** Freezes ACA Exposure amount\n* **140:** Account marked for potential illegal tax promotion\n\n\n\n---\n\n### IDRS STATUS FOR CC STAUP\n\n| Status | Staups | Notice 19/21 |\n| --- | --- | --- |\n| **20** | XX | CP 21/14/11a |\n| **56** | XX | CP 501 |\n| **58** | XX | CP 503 |\n| **22** | XX | CP 504 |\n| **22/24/26** | TDI status |  |\n\n---\n\n### SOURCE DOCUMENT (SD)\n\n* **Y:** Paper documents attached to label.\n* **N:** No input documents. Nothing attached to label.\n* **R:** Documents have been recharged to another area.\n\n---\n\n### HOLD CODES\n\n* **0:** No other HC applies.\n* **1:** Holds refund, allows adjustment notice.\n* **2:** Holds refund delays adjustment notice.\n* **3:** Stops adjustment notice, allows refund.\n* **4:** Stops notice forever, holds refund.\n\n---\n\n### REASON CODES\n\n* IRM 21.6.7-1 Revised 03/30/2020",
   "daily-notes/2024-first-note.md": "# Getting Started Notes\n\n**Date:** 2024-01-01\n**Category:** Onboarding\n\n---\n\n## Today’s Learning\n\n- Set up KB Studio knowledge base\n- Learned how to create and organize Markdown files\n- Explored VS Code-like interface in the browser\n\n## Action Items\n\n- [ ] Create a folder structure for projects\n- [ ] Add bookmarks to the links directory\n- [ ] Document first technical solution\n\n## Notes\n\nThe File System Access API in Chrome/Edge lets this app read and write files directly without a server — very useful in restricted IT environments.\n",
   "solutions/excel-vlookup-tips.md": "# Excel VLOOKUP & XLOOKUP Tips ...\n\n**Category:** Office Productivity\n\n---\n\n## VLOOKUP Syntax\n\n```\n=VLOOKUP(lookup_value, table_array, col_index, [range_lookup])\n```\n\n- **lookup_value** — what you’re searching for\n- **table_array** — the range to search\n- **col_index** — column number to return\n- **range_lookup** — use `FALSE` for exact match\n\n## Example\n\n```\n=VLOOKUP(A2, $D$2:$F$100, 2, FALSE)\n```\n\n## Common Errors\n\n| Error | Meaning | Fix |\n|-------|---------|-----|\n| `#N/A` | Value not found | Check spelling; use IFERROR |\n| `#REF!` | Column index too high | Reduce col_index |\n| `#VALUE!` | Wrong data type | Ensure types match |\n\n## Modern Alternative: XLOOKUP (Office 365)\n\n```\n=XLOOKUP(lookup_value, lookup_array, return_array, [if_not_found])\n```\n\nMore flexible: looks left, returns multiple columns, built-in error handling.\n\n---\n*Tags: excel, office, formulas*\n",
   "solutions/proxy-connection-fix.md": "# Fix: Corporate Proxy Connection Issue\n\n**Problem:** Browser shows `ERR_CONNECTION_REFUSED` on internal tools\n**Environment:** Windows, Corporate Network\n\n---\n\n## Symptoms\n\n- Internal web apps fail to load\n- Error code: `ERR_CONNECTION_REFUSED`\n\n## Root Cause\n\nProxy settings inherited from Internet Explorer were misconfigured.\n\n## Solution\n\n```\n1. Open: Control Panel → Internet Options → Connections → LAN Settings\n2. Check \"Use a proxy server\"\n3. Enter correct proxy address (get from IT)\n4. Click OK and restart browser\n```\n\n## Alternative (PowerShell, no admin needed)\n\n```powershell\nnetsh winhttp show proxy\nnetsh winhttp import proxy source=ie\n```\n\n**Status:** ✅ Resolved\n\n---\n*Tags: network, proxy, browser, windows*\n",
-  "templates/daily-note-template.md": "# Daily Note — [DATE]\n\n**Focus:** [Main objective for today]\n\n---\n\n## ✅ Task List\n\n- [ ] \n- [ ] \n- [ ] \n\n## 📚 Learning & Notes\n\n> Key learnings, observations, or ideas from today\n\n## 🐛 Issues Encountered\n\n| Issue | Status | Notes |\n|-------|--------|-------|\n|       |        |       |\n\n## 💡 Tomorrow’s Priorities\n\n1. \n2. \n3. \n\n---\n*Tags: daily, [project-name]*\n"
+  "templates/daily-note-template.md": "# Daily Note — [DATE]\n\n**Focus:** [Main objective for today]\n\n---\n\n## ✅ Task List\n\n- [ ] \n- [ ] \n- [ ] \n\n## 📚 Learning & Notes\n\n> Key learnings, observations, or ideas from today\n\n## 🐛 Issues Encountered\n\n| Issue | Status | Notes |\n|-------|--------|-------|\n|       |        |       |\n\n## 💡 Tomorrow’s Priorities\n\n1. \n2. \n3. \n\n---\n*Tags: daily, [project-name]*\n",
+  "terms/terms.md": "Tax terminology can definitely feel like alphabet soup when you first start working with tax filing!\n\nHere is a simple, plain-English breakdown of all the child-related tax credits, terms, and abbreviations you will encounter.\n\n---\n\n## 1. Core Child Tax Terms & Abbreviations\n\n### **CTC — Child Tax Credit**\n\n* **What it is:** A credit that reduces the federal income tax you owe for having an eligible dependent child under age 17.\n* **How it works:** It acts as a direct discount on your total tax liability (dollar-for-dollar reduction).\n\n### **ACTC — Additional Child Tax Credit**\n\n* **What it is:** The **refundable** portion of the Child Tax Credit.\n* **How it works:** If your Child Tax Credit reduces your tax liability all the way down to **$0**, and you still have credit left over, the IRS refunds that remaining amount back to you as cash.\n\n### **ACTC / Advanced CTC — Advance Child Tax Credit** *(Often Confused!)*\n\n* **What it is:** Pre-payments of the credit sent out in monthly installments during the tax year (most notably during the expanded tax year of 2021).\n* **How it works:** Instead of waiting until tax filing season to get the full credit, taxpayers received advance monthly cash payments. When filing the return, the advance payments received must be reconciled against the total credit claimed.\n\n### **ODC — Credit for Other Dependents**\n\n* **What it is:** A non-refundable credit for dependents who **do not qualify** for the main Child Tax Credit.\n* **Who qualifies:** Children aged 17 or older, full-time college students up to age 23, elderly parents, or qualifying relatives.\n\n---\n\n## 2. Health & Insurance Child Terminology\n\n### **PTC — Premium Tax Credit**\n\n* **What it is:** A tax credit that helps low- to moderate-income families pay for health insurance purchased through the Health Insurance Marketplace (Healthcare.gov).\n\n### **APTC — Advance Premium Tax Credit**\n\n* **What it is:** Paying the Premium Tax Credit directly to the health insurance company each month to lower monthly health premium costs upfront.\n* **Reconciliation:** At tax time, taxpayers compare the APTC used during the year against their actual income on **Form 8962**.\n\n> **Note on \"Premium Child Tax Credit\":** There is no official tax term called \"Premium Child Tax Credit.\" This is usually a mix-up between the **Child Tax Credit (CTC)** and the **Premium Tax Credit (PTC)** for health insurance.\n\n---\n\n## 3. Other Essential Child-Related Tax Terms You Should Know\n\n### **EITC / EIC — Earned Income Tax Credit**\n\n* **What it is:** A major refundable tax credit for low- to moderate-income working individuals and families.\n* **Child connection:** Having qualifying children significantly increases the size of the EITC payment.\n\n### **CDCC — Child and Dependent Care Credit**\n\n* **What it is:** A tax credit designed to offset costs paid for child care (daycare, babysitters, nursery school, or after-school care) so parents can work or look for work.\n\n### **QC — Qualifying Child**\n\n* **What it is:** The strict set of IRS rules a child must satisfy to be claimed on a tax return.\n* **The Core Requirements:**\n1. **Relationship:** Son, daughter, stepchild, foster child, sibling, or a descendant of any of them.\n2. **Age:** Under age 17 (for CTC), or under 19 (or under 24 if a full-time student).\n3. **Residency:** Must live with the taxpayer for more than half of the tax year.\n4. **Support:** The child cannot have provided more than half of their own financial support.\n5. **Joint Return:** The child cannot file a joint tax return for the year (unless solely to claim a refund).\n\n\n\n---\n\n## Quick Reference Summary Table\n\n| Term / Abbreviation | Full Name | Primary Purpose | Refundable? |\n| --- | --- | --- | --- |\n| **CTC** | Child Tax Credit | Reduces tax liability for children under 17 | Partially |\n| **ACTC** | Additional Child Tax Credit | Refundable cash portion of the CTC | **Yes** |\n| **ODC** | Credit for Other Dependents | Credit for older children (17+) or dependent relatives | No |\n| **EITC** | Earned Income Tax Credit | Benefit for working individuals/families with children | **Yes** |\n| **CDCC** | Child & Dependent Care Credit | Helps cover daycare/babysitting expenses | Generally No |\n| **PTC / APTC** | (Advance) Premium Tax Credit | Helps pay for Marketplace health insurance | Reconciled at filing |\n\n---\n\nWould you like to walk through a specific tax scenario or detail the qualification rules for any of these individual credits?\n\n\n\nLet’s lay everything out so nothing is left out or missed.\n\nHere is the complete master breakdown of all child-related tax credits, rules, dollar limits, and qualifying conditions, fully consolidated into simple text visualizations.\n\n---\n\n## 1. Complete Master Table of Child-Related Credits\n\n| Tax Credit | Primary Purpose | 2026 Dollar Cap | Child Limit? | Refundable? (Cash Back) | Key Income Rule / Phase-Out |\n| --- | --- | --- | --- | --- | --- |\n| **CTC** (Child Tax Credit) | Direct tax reduction for kids under 17 | Up to **$2,200** per child | **No limit** | Partially (via ACTC) | Full credit up to $200k (Single) / $400k (Joint); then phases out. |\n| **ACTC** (Additional Child Tax Credit) | Refundable portion when CTC drops tax owed to $0 | Up to **$1,700** per child | **No limit** | **YES** | Requires at least $2,500 in earned income. |\n| **ODC** (Credit for Other Dependents) | Tax discount for older children (17–23 students) or relatives | Up to **$500** per dependent | **No limit** | **NO** | Decreases if income exceeds $200k (Single) / $400k (Joint). |\n| **EITC** (Earned Income Tax Credit) | Financial assistance for working low- to moderate-income earners | Up to **$8,231** total max | **Caps at 3+ kids** | **YES** | Phases out completely as income approaches $50k–$68k. |\n| **CDCC** (Child & Dependent Care Credit) | Offsets daycare, camp, or babysitting costs while you work | 20%–50% of $3k (1 kid) or $6k (2+ kids) expenses | **Caps at 2+ kids** | **NO** | No upper income limit, but credit % drops as income rises. |\n| **PTC / APTC** (Premium Tax Credit) | Lowers health insurance premiums on Healthcare.gov | Varies by income & health plan | Household basis | Reconciled on Form 8962 | Based on household income relative to federal poverty lines. |\n\n---\n\n## 2. Terminology Clarification Guide\n\n```text\n┌─────────────────────────────────────────────────────────────────────────────┐\n│ ❌ FALSE TERM: \"Premium Child Tax Credit\"                                     │\n│     ➜ Mixes up Child Tax Credit (CTC) with Health Insurance Premium Tax   │\n│       Credits (PTC). They are completely separate IRS programs!             │\n├─────────────────────────────────────────────────────────────────────────────┤\n│ ⚠️ MISUNDERSTOOD TERM: \"Advance Child Tax Credit\"                            │\n│     ➜ Refers to mid-year advance monthly payouts used during past stimulus  │\n│       years (like 2021). For regular filing, you claim CTC on your return.  │\n└─────────────────────────────────────────────────────────────────────────────┘\n\n```\n\n---\n\n## 3. Which Credit Applies to My Dependent? (Flowchart)\n\n```text\n                       START: Dependent Child\n                                 │\n                  Is the child under 17 years old?\n                 ┌───────────────┴───────────────┐\n                YES                             NO\n                 │                               │\n    ┌────────────┴────────────┐    ┌─────────────┴─────────────┐\n    │ Child Tax Credit (CTC)  │    │ Credit for Other          │\n    │ Up to $2,200 per child  │    │ Dependents (ODC)          │\n    └────────────┬────────────┘    │ Up to $500 per dependent  │\n                 │                 └───────────────────────────┘\n   Does CTC reduce tax bill to $0?\n    ┌────────────┴────────────┐\n   YES                       NO\n    │                         │\n┌───┴───────────────────────┐ ┌─┴─────────────────────────────┐\n│ Additional CTC (ACTC)     │ │ Remaining tax liability is    │\n│ Cash refund up to $1,700  │ │ reduced by full $2,200 amount.│\n│ per child                 │ └───────────────────────────────┘\n└───────────────────────────┘\n\n```\n\n---\n\n## 4. IRS \"Qualifying Child\" Rules (QC Checklist)\n\nTo claim a child for **any** child-related credit, the child must meet these strict criteria:\n\n```text\n┌─────────────────┬───────────────────────────────────────────────────────────┐\n│ 1. Relationship │ Son, daughter, stepchild, foster child, or sibling.       │\n├─────────────────┼───────────────────────────────────────────────────────────┤\n│ 2. Age          │ Under 17 (for CTC) OR under 19 (or <24 if student).     │\n├─────────────────┼───────────────────────────────────────────────────────────┤\n│ 3. Residency    │ Must live with you for MORE than 6 months of the tax year.│\n├─────────────────┼───────────────────────────────────────────────────────────┤\n│ 4. Support      │ Child must NOT have paid over 50% of their own expenses.   │\n├─────────────────┼───────────────────────────────────────────────────────────┤\n│ 5. SSN / ID     │ Child (and parent) must have valid Social Security numbers│\n│                 │ for CTC purposes.                                         │\n└─────────────────┴───────────────────────────────────────────────────────────┘\n\n```\n\n---\n\n## 5. How Child Credits Work Together (Stacking Example)\n\nTax credits are **not mutually exclusive**; you can claim multiple child-related benefits on the same return if you meet the requirements:\n\n```text\n┌──────────────────────────────────────────────────────────────────────────────┐\n│  EXAMPLE SCENARIO: Household with 2 kids (ages 3 & 5), daycare expenses      │\n├──────────────────────────────────────────────────────────────────────────────┤\n│  1. Child Tax Credit (CTC)      ➜  Claim $2,200 x 2 = $4,400                 │\n│  2. Care Credit (CDCC)          ➜  Claim up to 50% on $6,000 daycare costs   │\n│  3. Earned Income Credit (EITC) ➜  Claim 2-child tiered refund if within     │\n│                                    qualifying income bracket                 │\n└──────────────────────────────────────────────────────────────────────────────┘\n\n```\n\n\nHere is a complete, simplified guide bringing together all child-related IRS tax terms, rules, and limits into clear text-based visual formats.\n\n---\n\n## 1. Master Glossary & Comparison Table\n\n| Abbreviation | Full Name | Main Purpose | 2026 Dollar Cap | Kid Count Limit? | Refundable? |\n| --- | --- | --- | --- | --- | --- |\n| **CTC** | Child Tax Credit | Direct discount on taxes owed for kids under 17 | **$2,200** / child | **No limit** | Partially |\n| **ACTC** | Additional Child Tax Credit | Cash refund when CTC drops your tax bill to $0 | Up to **$1,700** / child | **No limit** | **YES (Cash back)** |\n| **ODC** | Credit for Other Dependents | For older kids (17–23, students) or dependent relatives | Up to **$500** / dependent | **No limit** | No |\n| **EITC** | Earned Income Tax Credit | Extra cash support for low- to moderate-income workers | Max **$8,231** total | **Caps at 3 kids** | **YES (Cash back)** |\n| **CDCC** | Child & Dependent Care Credit | Offsets daycare/camp costs while parents work | **$3k** (1 kid) / **$6k** (2+ kids) expenses | **Caps at 2 kids** | No |\n| **PTC / APTC** | (Advance) Premium Tax Credit | Lowers monthly Health Insurance Marketplace premiums | Varies by income & plan | Household basis | Reconciled at filing |\n\n> ⚠️ **Common Mix-up:** \"Advance CTC\" referred to monthly mid-year payouts used during special tax years (like 2021). \"Premium Child Tax Credit\" is a misnomer that confuses the **Child Tax Credit** with health insurance **Premium Tax Credits**.\n\n---\n\n## 2. Decision Tree: Which Credit Fits My Child?\n\n```text\n               START: You have a dependent\n                            │\n               Is the child under age 17?\n              ┌─────────────┴─────────────┐\n             YES                         NO\n              │                           │\n  ┌───────────┴───────────┐       ┌───────┴───────┐\n  │ Child Tax Credit      │       │ Credit for    │\n  │ (CTC: $2,200/child)   │       │ Other         │\n  └───────────┬───────────┘       │ Dependents    │\n              │                   │ (ODC: $500)   │\n  Does CTC reduce tax to $0?      └───────────────┘\n  ┌───────────┴───────────┐\n YES                     NO\n  │                       │\n┌─┴─────────────────┐   ┌─┴─────────────────┐\n│ Additional CTC    │   │ Total tax bill is │\n│ (ACTC: Up to      │   │ reduced by full   │\n│ $1,700 cash back) │   │ $2,200 amount.    │\n└───────────────────┘   └───────────────────┘\n\n```\n\n---\n\n## 3. Qualification Checklist Flow\n\nTo claim a **Qualifying Child (QC)** for tax credits, the child must meet these five core rules:\n\n```text\n[1. RELATIONSHIP]  ──► Son, daughter, stepchild, foster child, sibling, or descendant.\n        │\n[2. AGE]           ──► Under 17 (CTC) OR under 19 (or <24 if full-time student).\n        │\n[3. RESIDENCY]     ──► Lived with you for MORE than 6 months of the year.\n        │\n[4. SUPPORT]       ──► Child did NOT provide over 50% of their own support.\n        │\n[5. FILING STATUS] ──► Cannot file a joint return with a spouse (unless for a refund).\n\n```\n\n---\n\n## 4. Stackable Child Benefits Example\n\nIf you have **two qualifying children (ages 4 and 6)**, earn **$40,000**, and spent **$5,000 on daycare**:\n\n```text\n┌────────────────────────────────────────────────────────┐\n│  1. Child Tax Credit (CTC): 2 x $2,200 = $4,400        │\n│  2. Child & Dependent Care Credit (CDCC): ~35% of $5k  │\n│  3. Earned Income Tax Credit (EITC): 2 Kids Tier       │\n└────────────────────────────────────────────────────────┘\n\n```\n\n*You do **not** have to choose just one; you can claim multiple credits on the same return as long as you meet each credit's rules.*"
 };
 /* __MAPPED_NOTES_END__ */
 
@@ -1074,11 +1158,23 @@ async function buildMappedTree(container, filter){
   container.appendChild(notesChildren);
 }
 
+function getMappedNoteContent(path, rel){
+  var base = MAPPED_NOTES[rel] !== undefined ? MAPPED_NOTES[rel] : '';
+  var saved = localStorage.getItem('mapped_note:' + path);
+  var savedBase = localStorage.getItem('mapped_note_base:' + path);
+  if(saved !== null){
+    // Only use localStorage override if the underlying file hasn't changed externally
+    if(savedBase !== null && savedBase === base) return saved;
+    localStorage.removeItem('mapped_note:' + path);
+    localStorage.removeItem('mapped_note_base:' + path);
+  }
+  return base;
+}
+
 async function openMappedNote(path, fileHandle){
-  if(openFiles[path]){setActiveTab(path);return;}
   var rel=path.startsWith('notes/')?path.slice(6):path;
-  var content='';
-  var handle=fileHandle||null;
+  var content=null;
+  var handle=fileHandle||(openFiles[path]&&openFiles[path].handle)||null;
   if(!handle && localNotesHandle){
     try{
       var parts=rel.split('/');
@@ -1094,9 +1190,17 @@ async function openMappedNote(path, fileHandle){
       content=await file.text();
     }catch(e){}
   }
-  if(!content){
-    var saved=localStorage.getItem('mapped_note:'+path);
-    content=saved!==null?saved:(MAPPED_NOTES[rel]!==undefined?MAPPED_NOTES[rel]:'');
+  if(content===null){
+    content=getMappedNoteContent(path, rel);
+  }
+  if(openFiles[path]){
+    openFiles[path].handle=handle;
+    if(!openFiles[path].modified){
+      openFiles[path].content=content;
+      openFiles[path].saved=content;
+    }
+    setActiveTab(path);
+    return;
   }
   openFiles[path]={
     isMappedNote:true,
@@ -1200,10 +1304,18 @@ function showEmptyTree(){
 // FILE OPS
 // =========================================================
 async function openFile(handle,path){
-  if(openFiles[path]){setActiveTab(path);return;}
   try{
     var file=await handle.getFile();
     var content=await file.text();
+    if(openFiles[path]){
+      openFiles[path].handle=handle;
+      if(!openFiles[path].modified){
+        openFiles[path].content=content;
+        openFiles[path].saved=content;
+      }
+      setActiveTab(path);
+      return;
+    }
     openFiles[path]={handle,content,saved:content,modified:false};
     addTab(path);setActiveTab(path);
   }catch(e){notify('Error reading: '+e.message,'error');}
@@ -1217,6 +1329,7 @@ async function saveCurrentFile(){
   try{
     if(f.isMappedNote){
       localStorage.setItem('mapped_note:'+activeTab, content);
+      localStorage.setItem('mapped_note_base:'+activeTab, content);
       MAPPED_NOTES[f.rel]=content;
       var h=f.handle;
       if(!h && localNotesHandle){
@@ -1245,29 +1358,150 @@ async function saveCurrentFile(){
   }catch(e){notify('Save failed: '+e.message,'error');}
 }
 
+var GITHUB_REPO_OWNER = 'fewsteps';
+var GITHUB_REPO_NAME  = 'jobNotes';
+var GITHUB_BRANCH     = 'main';
+
+function getGitHubRepoInfo(){
+  var owner = GITHUB_REPO_OWNER;
+  var repo  = GITHUB_REPO_NAME;
+  if(window.location.hostname.endsWith('.github.io')){
+    owner = window.location.hostname.replace(/\.github\.io$/, '');
+    var parts = window.location.pathname.split('/').filter(Boolean);
+    if(parts.length > 0 && !parts[0].endsWith('.html')) repo = parts[0];
+  }
+  return { owner: owner, repo: repo, branch: GITHUB_BRANCH };
+}
+
+function encodeRelPath(rel){
+  return rel.split('/').map(encodeURIComponent).join('/');
+}
+
 async function syncRemoteNotes(){
-  if(!window.location.protocol.startsWith('http')) return;
+  var gh = getGitHubRepoInfo();
+  var isHttp = window.location.protocol.startsWith('http');
+  var relSet = {};
+  Object.keys(MAPPED_NOTES).forEach(function(k){ relSet[k] = true; });
+
+  // 1. Discover files directly from live GitHub Tree API (updates immediately on git push!)
   try{
-    var res=await fetch('notes/manifest.json');
-    if(!res.ok) return;
-    var list=await res.json();
-    if(Array.isArray(list)){
-      var changed=false;
-      for(var rel of list){
-        if(MAPPED_NOTES[rel]===undefined){
-          try{
-            var fRes=await fetch('notes/'+rel);
-            if(fRes.ok){
-              MAPPED_NOTES[rel]=await fRes.text();
-              changed=true;
-            }
-          }catch(e){}
+    var treeUrl = 'https://api.github.com/repos/' + gh.owner + '/' + gh.repo + '/git/trees/' + gh.branch + '?recursive=1&t=' + Date.now();
+    var tRes = await fetch(treeUrl, {cache: 'no-store'});
+    if(tRes.ok){
+      var tData = await tRes.json();
+      if(tData && Array.isArray(tData.tree)){
+        for(var item of tData.tree){
+          if(item.type === 'blob' && item.path.startsWith('notes/')){
+            var rel = item.path.slice(6);
+            if(!rel || rel === 'manifest.json') continue;
+            if(/\.(pdf|png|jpg|jpeg|gif|webp|ico|zip|docx|xlsx)$/i.test(rel)) continue;
+            if(rel.split('/').some(function(p){ return p.startsWith('.'); })) continue;
+            relSet[rel] = true;
+          }
         }
       }
-      if(changed) await renderTree();
     }
   }catch(e){}
+
+  // 2. Also check same-origin notes/manifest.json (Cloudflare / local server / GitHub Pages)
+  if(isHttp){
+    try{
+      var mRes = await fetch('notes/manifest.json?t=' + Date.now(), {cache: 'no-store'});
+      if(mRes.ok){
+        var mList = await mRes.json();
+        if(Array.isArray(mList)){
+          for(var r of mList){
+            if(r && r !== 'manifest.json') relSet[r] = true;
+          }
+        }
+      }
+    }catch(e){}
+  }
+
+  // 3. Fetch latest content for all discovered notes
+  var allRels = Object.keys(relSet);
+  var changed = false;
+  await Promise.all(allRels.map(async function(rel){
+    var encRel = encodeRelPath(rel);
+    var text = null;
+    var rawGhUrl = 'https://raw.githubusercontent.com/' + gh.owner + '/' + gh.repo + '/' + gh.branch + '/notes/' + encRel + '?t=' + Date.now();
+    var localUrl = 'notes/' + encRel + '?t=' + Date.now();
+    var urls = [];
+    if(isHttp && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')){
+      urls = [localUrl, rawGhUrl];
+    } else if(isHttp){
+      urls = [rawGhUrl, localUrl];
+    } else {
+      urls = [rawGhUrl];
+    }
+    for(var u of urls){
+      try{
+        var fRes = await fetch(u, {cache: 'no-store'});
+        if(fRes.ok){
+          text = await fRes.text();
+          break;
+        }
+      }catch(e){}
+    }
+    if(text !== null && MAPPED_NOTES[rel] !== text){
+      MAPPED_NOTES[rel] = text;
+      changed = true;
+      var fullPath = 'notes/' + rel;
+      localStorage.removeItem('mapped_note:' + fullPath);
+      localStorage.removeItem('mapped_note_base:' + fullPath);
+      if(openFiles[fullPath] && !openFiles[fullPath].modified){
+        openFiles[fullPath].content = text;
+        openFiles[fullPath].saved = text;
+        if(activeTab === fullPath){
+          document.getElementById('editor-textarea').value = text;
+          updatePreview();
+          updateStatus();
+        }
+      }
+    }
+  }));
+
+  if(changed) await renderTree();
 }
+
+async function reloadOpenFiles(){
+  var paths = Object.keys(openFiles);
+  for(var i=0; i<paths.length; i++){
+    var p = paths[i];
+    var f = openFiles[p];
+    if(!f || f.modified) continue;
+    var fresh = null;
+    if(!f.handle && f.isMappedNote && localNotesHandle){
+      try{
+        var parts=f.rel.split('/'), name=parts.pop(), dir=localNotesHandle;
+        for(var pt of parts) dir=await dir.getDirectoryHandle(pt);
+        f.handle=await dir.getFileHandle(name);
+      }catch(e){}
+    }
+    if(f.handle){
+      try{
+        var file = await f.handle.getFile();
+        fresh = await file.text();
+      }catch(e){}
+    }
+    if(fresh === null && f.isMappedNote){
+      fresh = getMappedNoteContent(p, f.rel);
+    }
+    if(fresh !== null && fresh !== f.content){
+      f.content = fresh;
+      f.saved = fresh;
+      if(activeTab === p){
+        document.getElementById('editor-textarea').value = fresh;
+        updatePreview();
+        updateStatus();
+      }
+    }
+  }
+}
+
+window.addEventListener('focus', function(){
+  reloadOpenFiles();
+});
 
 async function autoSave(){
   if(activeTab&&openFiles[activeTab]&&openFiles[activeTab].modified) await saveCurrentFile();
@@ -1322,6 +1556,7 @@ function showWelcome(){
   document.getElementById('welcome-screen').classList.remove('hidden');
   document.getElementById('editor-pane').classList.add('hidden');
   document.getElementById('preview-pane').classList.remove('visible','split');
+  document.getElementById('preview-toc').classList.remove('visible');
   document.getElementById('sb-file').textContent='';
   document.getElementById('sb-words').textContent='0 words';
   document.getElementById('sb-lines').textContent='Ln 1, Col 1';
@@ -1340,31 +1575,322 @@ function onInput(){
 }
 
 // =========================================================
-// VIEW
+// VIEW & TREE INDEX (OUTLINE)
 // =========================================================
+var showTocInPreview = true;
+
 function setViewMode(mode){viewMode=mode;applyView();updateToolbar();if(mode!=='edit')updatePreview();}
 
 function applyView(){
-  var ep=document.getElementById('editor-pane'),pp=document.getElementById('preview-pane');
-  ep.classList.remove('split');pp.classList.remove('visible','split');
+  var ep=document.getElementById('editor-pane'),pp=document.getElementById('preview-pane'),toc=document.getElementById('preview-toc'),unhideBtn=document.getElementById('btn-unhide-toc');
+  ep.classList.remove('split');pp.classList.remove('visible','split');toc.classList.remove('visible');
+  if(unhideBtn) unhideBtn.style.display='none';
   if(!activeTab) return;
   if(viewMode==='edit'){ep.classList.remove('hidden');}
-  else if(viewMode==='preview'){ep.classList.add('hidden');pp.classList.add('visible');}
-  else if(viewMode==='split'){ep.classList.remove('hidden');ep.classList.add('split');pp.classList.add('split');}
+  else if(viewMode==='preview'){ep.classList.add('hidden');pp.classList.add('visible');if(showTocInPreview)toc.classList.add('visible');else if(unhideBtn)unhideBtn.style.display='inline-flex';}
+  else if(viewMode==='split'){ep.classList.remove('hidden');ep.classList.add('split');pp.classList.add('split');if(showTocInPreview)toc.classList.add('visible');else if(unhideBtn)unhideBtn.style.display='inline-flex';}
 }
 
 function updateToolbar(){
   document.getElementById('btn-edit').classList.toggle('active',viewMode==='edit');
   document.getElementById('btn-split').classList.toggle('active',viewMode==='split');
   document.getElementById('btn-preview').classList.toggle('active',viewMode==='preview');
+  var tocBtn=document.getElementById('btn-toc');
+  if(tocBtn){
+    tocBtn.style.display=viewMode==='edit'?'none':'';
+    tocBtn.classList.toggle('active',showTocInPreview && viewMode!=='edit');
+  }
   document.getElementById('md-format-btns').style.display=viewMode==='preview'?'none':'';
+}
+
+function togglePreviewToc(){
+  if(viewMode==='edit') setViewMode('preview');
+  else {
+    showTocInPreview=!showTocInPreview;
+    applyView();
+    updateToolbar();
+  }
+}
+
+function extractTocTree(bodyEl){
+  var nodes=[];
+  var els=bodyEl.querySelectorAll('h1,h2,h3,h4,h5,h6,p');
+  var lastHeadingLevel=2;
+  var prevHeadingEl=null;
+  var subIdx=0;
+  for(var i=0;i<els.length;i++){
+    var el=els[i];
+    var tag=el.tagName.toLowerCase();
+    if(/^h[1-6]$/.test(tag)){
+      var lv=parseInt(tag.slice(1),10);
+      if(lv===2 && prevHeadingEl && el.previousElementSibling===prevHeadingEl){
+        lv=3;
+      } else {
+        prevHeadingEl=el;
+      }
+      lastHeadingLevel=lv;
+      var txt=(el.textContent||'').trim();
+      if(!txt) continue;
+      if(!el.id) el.id='sec-'+(++subIdx);
+      nodes.push({id:el.id,text:txt,level:lv,el:el,children:[]});
+    } else if(tag==='p' && el.children.length===1 && el.children[0].tagName==='STRONG'){
+      var raw=(el.textContent||'').trim();
+      var st=(el.children[0].textContent||'').trim();
+      if(raw===st && raw.length>=3 && raw.length<=65 && !/^(legend|use "ctrl\+f")/i.test(raw)){
+        if(!el.id) el.id='sub-'+(++subIdx);
+        nodes.push({id:el.id,text:raw.replace(/:$/,''),level:Math.min(6,lastHeadingLevel+1),el:el,children:[]});
+      }
+    }
+  }
+  var root={level:0,children:[]};
+  var stack=[root];
+  for(var j=0;j<nodes.length;j++){
+    var item=nodes[j];
+    while(stack.length>1 && stack[stack.length-1].level>=item.level){
+      stack.pop();
+    }
+    stack[stack.length-1].children.push(item);
+    stack.push(item);
+  }
+  return {tree:root.children, total:nodes.length, flat:nodes};
+}
+
+function renderTocDom(bodyEl, treeContainer, filterText){
+  var data=extractTocTree(bodyEl);
+  treeContainer.innerHTML='';
+  if(!data.total){
+    treeContainer.innerHTML='<div class="toc-empty">No headings found</div>';
+    return;
+  }
+  var q=(filterText||'').trim().toLowerCase();
+  var defaultOpenAll = data.total <= 25 || q.length > 0;
+
+  function matchesFilter(node){
+    if(!q) return true;
+    if(node.text.toLowerCase().includes(q)) return true;
+    for(var i=0;i<node.children.length;i++){
+      if(matchesFilter(node.children[i])) return true;
+    }
+    return false;
+  }
+
+  function buildNodes(list, parentEl, depth){
+    for(var i=0;i<list.length;i++){
+      var n=list[i];
+      if(!matchesFilter(n)) continue;
+      var hasChildren=n.children && n.children.length>0;
+      var isOpen = defaultOpenAll || depth === 0;
+      var row=document.createElement('div');
+      row.className='toc-node';
+      row.dataset.targetId=n.id;
+      row.style.paddingLeft=(6 + depth*10)+'px';
+
+      var tog=document.createElement('span');
+      tog.className='toc-toggle';
+      tog.textContent=hasChildren?(isOpen?'\u25BC':'\u25B6'):'\u2022';
+      if(!hasChildren) tog.style.opacity='0.4';
+
+      var lbl=document.createElement('span');
+      lbl.className='toc-label';
+      lbl.title=n.text;
+      lbl.textContent=n.text;
+
+      row.appendChild(tog);
+      row.appendChild(lbl);
+      parentEl.appendChild(row);
+
+      var chWrap=null;
+      if(hasChildren){
+        chWrap=document.createElement('div');
+        chWrap.className='toc-children'+(isOpen?' open':'');
+        parentEl.appendChild(chWrap);
+        buildNodes(n.children, chWrap, depth+1);
+
+        tog.addEventListener('click',(function(wrap,btn){
+          return function(e){
+            e.stopPropagation();
+            var open=wrap.classList.toggle('open');
+            btn.textContent=open?'\u25BC':'\u25B6';
+          };
+        })(chWrap,tog));
+      }
+
+      row.addEventListener('click',(function(node,wrap,btn){
+        return function(){
+          treeContainer.querySelectorAll('.toc-node.active').forEach(function(el){el.classList.remove('active');});
+          this.classList.add('active');
+          if(wrap && !wrap.classList.contains('open')){
+            wrap.classList.add('open');
+            btn.textContent='\u25BC';
+          }
+          if(node.el) node.el.scrollIntoView({behavior:'smooth',block:'start'});
+        };
+      })(n,chWrap,tog));
+    }
+  }
+
+  buildNodes(data.tree, treeContainer, 0);
+}
+
+function filterPreviewToc(val){
+  var bodyEl=document.getElementById('preview-body');
+  var treeEl=document.getElementById('preview-toc-tree');
+  if(bodyEl && treeEl) renderTocDom(bodyEl, treeEl, val);
+}
+
+function expandAllToc(open){
+  var treeEl=document.getElementById('preview-toc-tree');
+  if(!treeEl) return;
+  treeEl.querySelectorAll('.toc-children').forEach(function(c){
+    c.classList.toggle('open',open);
+  });
+  treeEl.querySelectorAll('.toc-node').forEach(function(r){
+    var next=r.nextElementSibling;
+    if(next && next.classList.contains('toc-children')){
+      var t=r.querySelector('.toc-toggle');
+      if(t) t.textContent=open?'\u25BC':'\u25B6';
+    }
+  });
 }
 
 function updatePreview(){
   if(!activeTab) return;
   var content=document.getElementById('editor-textarea').value;
-  try{document.getElementById('preview-body').innerHTML=window.mdParse(content);}
-  catch(e){document.getElementById('preview-body').innerHTML='<p style="color:#f44747">Render error: '+escH(e.message)+'</p>';}
+  var bodyEl=document.getElementById('preview-body');
+  try{bodyEl.innerHTML=window.mdParse(content);}
+  catch(e){bodyEl.innerHTML='<p style="color:#f44747">Render error: '+escH(e.message)+'</p>';}
+  var treeEl=document.getElementById('preview-toc-tree');
+  var searchEl=document.getElementById('toc-search-input');
+  if(treeEl) renderTocDom(bodyEl, treeEl, searchEl?searchEl.value:'');
+}
+
+function openReaderTab(){
+  if(!activeTab){notify('Open a note first to launch Reader View.','error');return;}
+  var content=document.getElementById('editor-textarea').value;
+  var rendered='';
+  try{rendered=window.mdParse(content);}
+  catch(e){rendered='<p style="color:#f44747">Render error: '+escH(e.message)+'</p>';}
+  var fileName=activeTab.split('/').pop();
+  var htmlDoc='<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width, initial-scale=1.0">\n<title>'+escH(fileName)+' \u2014 Reader View</title>\n<style>\n'+
+    ':root {\n'+
+    '  --bg: #1e1e1e; --bg-panel: #252526; --bg-code: #0d0d0d; --bg-hover: #2a2d2e; --bg-sel: #094771;\n'+
+    '  --fg: #cccccc; --fg-sec: #969696; --fg-head: #569cd6; --fg-link: #9cdcfe; --fg-str: #ce9178;\n'+
+    '  --border: #3e3e3e; --accent: #007acc; --font-size: 16px;\n'+
+    '}\n'+
+    'body.light {\n'+
+    '  --bg: #ffffff; --bg-panel: #f6f8fa; --bg-code: #f6f8fa; --bg-hover: #eaeef2; --bg-sel: #ddf4ff;\n'+
+    '  --fg: #1f2328; --fg-sec: #59636e; --fg-head: #0969da; --fg-link: #0969da; --fg-str: #a40e26;\n'+
+    '  --border: #d0d7de; --accent: #0969da;\n'+
+    '}\n'+
+    '*, *::before, *::after { box-sizing: border-box; }\n'+
+    'html { scroll-behavior: smooth; }\n'+
+    'body { margin: 0; background: var(--bg); color: var(--fg); font-family: "Segoe UI", system-ui, -apple-system, sans-serif; font-size: var(--font-size); line-height: 1.8; transition: background 0.15s, color 0.15s; display: flex; min-height: 100vh; }\n'+
+    '::-webkit-scrollbar { width: 8px; height: 8px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: rgba(128,128,128,0.35); border-radius: 4px; }\n'+
+    '#reader-toc { position: sticky; top: 0; height: 100vh; width: 280px; background: var(--bg-panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; user-select: none; font-size: 13px; line-height: 1.45; transition: margin-left 0.2s ease; z-index: 50; }\n'+
+    '#reader-toc.collapsed { margin-left: -280px; }\n'+
+    '#reader-toc-unhide { position: fixed; top: 14px; left: 14px; z-index: 60; background: var(--bg-panel); color: var(--fg); border: 1px solid var(--border); border-radius: 999px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; display: none; align-items: center; gap: 5px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); opacity: 0.85; transition: opacity 0.2s, border-color 0.2s; font-family: inherit; }\n'+
+    '#reader-toc-unhide:hover { opacity: 1; border-color: var(--accent); color: var(--accent); }\n'+
+    '#reader-toc.collapsed ~ #reader-toc-unhide { display: inline-flex; }\n'+
+    '.toc-hdr { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--fg-sec); }\n'+
+    '.toc-hdr-btns { display: flex; gap: 4px; }\n'+
+    '.toc-ibtn { background: none; border: none; color: var(--fg-sec); cursor: pointer; padding: 2px 5px; border-radius: 3px; font-size: 13px; }\n'+
+    '.toc-ibtn:hover { background: var(--bg-hover); color: var(--fg); }\n'+
+    '.toc-search-box { padding: 8px 10px; border-bottom: 1px solid var(--border); }\n'+
+    '.toc-search-box input { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 5px 8px; color: var(--fg); font-size: 12px; outline: none; }\n'+
+    '.toc-search-box input:focus { border-color: var(--accent); }\n'+
+    '#toc-list { flex: 1; overflow-y: auto; padding: 6px 0 24px; }\n'+
+    '.toc-node { display: flex; align-items: center; gap: 5px; padding: 4px 10px 4px 8px; cursor: pointer; color: var(--fg); white-space: nowrap; overflow: hidden; border-left: 2px solid transparent; }\n'+
+    '.toc-node:hover { background: var(--bg-hover); }\n'+
+    '.toc-node.active { background: var(--bg-sel); border-left-color: var(--accent); font-weight: 600; }\n'+
+    '.toc-toggle { width: 15px; height: 15px; display: inline-flex; align-items: center; justify-content: center; font-size: 9px; color: var(--fg-sec); flex-shrink: 0; border-radius: 3px; }\n'+
+    '.toc-toggle:hover { background: rgba(128,128,128,0.2); color: var(--fg); }\n'+
+    '.toc-label { overflow: hidden; text-overflow: ellipsis; flex: 1; }\n'+
+    '.toc-children { display: none; margin-left: 12px; border-left: 1px solid var(--border); }\n'+
+    '.toc-children.open { display: block; }\n'+
+    '#reader-main { flex: 1; min-width: 0; }\n'+
+    '.reader-fab { position: fixed; bottom: 20px; right: 20px; z-index: 100; background: var(--bg-panel); border: 1px solid var(--border); border-radius: 999px; padding: 5px 8px; display: flex; align-items: center; gap: 4px; box-shadow: 0 6px 20px rgba(0,0,0,0.35); opacity: 0.55; transition: opacity 0.2s, transform 0.2s; backdrop-filter: blur(8px); }\n'+
+    '.reader-fab:hover { opacity: 1; }\n'+
+    '.r-btn { background: transparent; border: none; color: var(--fg); width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 13px; font-weight: 600; font-family: inherit; display: flex; align-items: center; justify-content: center; transition: background 0.15s, color 0.15s; }\n'+
+    '.r-btn:hover { background: rgba(0,122,204,0.18); color: var(--accent); }\n'+
+    '.md-body { max-width: 860px; margin: 0 auto; padding: 28px 36px 80px; }\n'+
+    '.md-body h1,.md-body h2,.md-body h3,.md-body h4,.md-body h5,.md-body h6 { color: var(--fg-head); font-weight: 600; margin: 1.4em 0 0.5em; line-height: 1.3; scroll-margin-top: 16px; }\n'+
+    '.md-body h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: 0.3em; }\n'+
+    '.md-body h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: 0.2em; }\n'+
+    '.md-body h3 { font-size: 1.25em; }\n'+
+    '.md-body p { margin: 0.8em 0; scroll-margin-top: 16px; }\n'+
+    '.md-body a { color: var(--fg-link); text-decoration: none; }\n'+
+    '.md-body a:hover { text-decoration: underline; }\n'+
+    '.md-body ul,.md-body ol { padding-left: 2em; margin: 0.6em 0; }\n'+
+    '.md-body li { margin: 0.3em 0; }\n'+
+    '.md-body blockquote { border-left: 3px solid var(--accent); margin: 1em 0; padding: 8px 16px; background: rgba(0,122,204,0.08); border-radius: 0 4px 4px 0; color: var(--fg-sec); }\n'+
+    '.md-body hr { border: none; border-top: 1px solid var(--border); margin: 1.5em 0; }\n'+
+    '.md-body table { border-collapse: collapse; width: 100%; margin: 1em 0; }\n'+
+    '.md-body th { background: var(--bg-panel); font-weight: 600; }\n'+
+    '.md-body th,.md-body td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; vertical-align: top; }\n'+
+    '.md-body tr:nth-child(even) td { background: rgba(128,128,128,0.04); }\n'+
+    '.md-body img { max-width: 100%; border-radius: 4px; margin: 0.5em 0; }\n'+
+    '.md-body code { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 3px; padding: 1px 5px; font-family: Consolas, monospace; font-size: 0.88em; color: var(--fg-str); }\n'+
+    '.md-body pre { background: var(--bg-code); border: 1px solid var(--border); border-radius: 4px; padding: 16px 20px; overflow-x: auto; margin: 1em 0; position: relative; }\n'+
+    '.md-body pre code { background: none; border: none; padding: 0; color: var(--fg); font-size: 13px; }\n'+
+    '.md-body pre .lang-label { position: absolute; top: 6px; right: 10px; font-size: 10px; color: var(--fg-sec); font-family: monospace; text-transform: uppercase; }\n'+
+    '.tok-keyword { color: #c586c0; } .tok-string { color: #ce9178; } .tok-comment { color: #6a9955; font-style: italic; } .tok-number { color: #b5cea8; }\n'+
+    '.md-body input[type=checkbox] { margin-right: 6px; accent-color: var(--accent); }\n'+
+    '.md-body li.task-item { list-style: none; margin-left: -1.5em; }\n'+
+    '@media print { #reader-toc, #reader-toc-unhide, .reader-fab { display: none !important; } body { background: #fff; color: #000; display: block; } .md-body { max-width: 100%; padding: 0; } }\n'+
+    '</style>\n</head>\n<body>\n'+
+    '<aside id="reader-toc">\n'+
+    '  <div class="toc-hdr">\n'+
+    '    <span>\uD83D\uDCD1 Index</span>\n'+
+    '    <div class="toc-hdr-btns">\n'+
+    '      <button class="toc-ibtn" onclick="expAll(true)" title="Expand All">\u229E</button>\n'+
+    '      <button class="toc-ibtn" onclick="expAll(false)" title="Collapse Sub-items">\u229F</button>\n'+
+    '      <button class="toc-ibtn" onclick="togToc()" title="Hide Index Sidebar" style="font-size:11px;padding:2px 6px;">\u25C0 Hide</button>\n'+
+    '    </div>\n'+
+    '  </div>\n'+
+    '  <div class="toc-search-box">\n'+
+    '    <input type="text" id="toc-q" placeholder="Filter index..." oninput="buildToc(this.value)">\n'+
+    '  </div>\n'+
+    '  <div id="toc-list"></div>\n'+
+    '</aside>\n'+
+    '<button id="reader-toc-unhide" onclick="togToc()" title="Show Index Sidebar">\uD83D\uDCD1 Show Index \u25B6</button>\n'+
+    '<main id="reader-main">\n'+
+    '  <div class="md-body" id="reader-body">'+rendered+'</div>\n'+
+    '</main>\n'+
+    '<div class="reader-fab">\n'+
+    '  <button class="r-btn" onclick="togToc()" title="Toggle Index Sidebar">\uD83D\uDCD1</button>\n'+
+    '  <button class="r-btn" onclick="chgFont(-1)" title="Decrease font size">A\u2212</button>\n'+
+    '  <button class="r-btn" onclick="chgFont(1)" title="Increase font size">A+</button>\n'+
+    '  <button class="r-btn" onclick="document.body.classList.toggle(\'light\')" title="Toggle Light/Dark theme">\uD83C\uDF13</button>\n'+
+    '  <button class="r-btn" onclick="window.print()" title="Print / Save PDF">\uD83D\uDDA8\uFE0F</button>\n'+
+    '  <button class="r-btn" onclick="window.scrollTo({top:0,behavior:\'smooth\'})" title="Back to top">\u2191</button>\n'+
+    '</div>\n'+
+    '<script>\n'+
+    'var fs=16;function chgFont(d){fs=Math.max(12,Math.min(26,fs+d));document.documentElement.style.setProperty("--font-size",fs+"px");}\n'+
+    'function togToc(){document.getElementById("reader-toc").classList.toggle("collapsed");}\n'+
+    'var extractTocTree='+extractTocTree.toString()+';\n'+
+    'var renderTocDom='+renderTocDom.toString()+';\n'+
+    'function buildToc(q){renderTocDom(document.getElementById("reader-body"),document.getElementById("toc-list"),q||"");}\n'+
+    'function expAll(open){\n'+
+    '  var tl=document.getElementById("toc-list");\n'+
+    '  tl.querySelectorAll(".toc-children").forEach(function(c){c.classList.toggle("open",open);});\n'+
+    '  tl.querySelectorAll(".toc-node").forEach(function(r){var nx=r.nextElementSibling;if(nx&&nx.classList.contains("toc-children")){var t=r.querySelector(".toc-toggle");if(t)t.textContent=open?"\\u25BC":"\\u25B6";}});\n'+
+    '}\n'+
+    'buildToc("");\n'+
+    'window.addEventListener("scroll",function(){\n'+
+    '  var hs=document.querySelectorAll("#reader-body h1,#reader-body h2,#reader-body h3,#reader-body p[id^=sub-]");\n'+
+    '  var cur=null;\n'+
+    '  for(var i=0;i<hs.length;i++){if(hs[i].getBoundingClientRect().top<=100)cur=hs[i];else break;}\n'+
+    '  if(cur){\n'+
+    '    document.querySelectorAll("#toc-list .toc-node.active").forEach(function(n){n.classList.remove("active");});\n'+
+    '    var act=document.querySelector(\'#toc-list .toc-node[data-target-id="\'+cur.id+\'"]\');\n'+
+    '    if(act){act.classList.add("active");act.scrollIntoView({block:"nearest"});}\n'+
+    '  }\n'+
+    '},{passive:true});\n'+
+    '<\/script>\n'+
+    '</body>\n</html>';
+  var blob=new Blob([htmlDoc],{type:'text/html;charset=utf-8'});
+  var url=URL.createObjectURL(blob);
+  window.open(url,'_blank');
 }
 
 // =========================================================
@@ -1522,7 +2048,7 @@ function filterTree(val){renderTree();}
 // =========================================================
 // REFRESH / COLLAPSE
 // =========================================================
-async function refreshTree(){await renderTree();notify('File tree refreshed');}
+async function refreshTree(){await syncRemoteNotes();await renderTree();notify('File tree refreshed');}
 function collapseAll(){document.querySelectorAll('.tree-folder-children.open').forEach(function(el){el.classList.remove('open');});}
 
 // =========================================================

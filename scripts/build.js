@@ -19,7 +19,8 @@ if (!fs.existsSync(SRC)) {
   process.exit(1);
 }
 
-// 1. Scan notes/ recursively
+// 1. Scan notes/ recursively (only text/markdown files, skip binary files like .pdf)
+const BINARY_EXTS = new Set(['.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.zip', '.docx', '.xlsx']);
 function scanNotes(dir, base = '') {
   let res = {};
   if (!fs.existsSync(dir)) return res;
@@ -30,6 +31,8 @@ function scanNotes(dir, base = '') {
     if (fs.statSync(full).isDirectory()) {
       Object.assign(res, scanNotes(full, rel));
     } else {
+      const ext = path.extname(item).toLowerCase();
+      if (BINARY_EXTS.has(ext)) continue;
       res[rel] = fs.readFileSync(full, 'utf8');
     }
   }
@@ -83,6 +86,19 @@ if (fs.existsSync(NOTES_SRC)) {
 
 const sizeKB = (fs.statSync(DEST).size / 1024).toFixed(1);
 const count = Object.keys(mappedNotes).length;
+
+// Auto-install git pre-commit hook so `git commit` always bundles notes/ automatically
+try {
+  const hooksDir = path.join(ROOT, '.git', 'hooks');
+  if (fs.existsSync(hooksDir)) {
+    const hookPath = path.join(hooksDir, 'pre-commit');
+    const hookScript = '#!/bin/sh\nnode scripts/build.js\ngit add index.html notes/manifest.json\n';
+    fs.writeFileSync(hookPath, hookScript, { mode: 0o755 });
+  }
+} catch (e) {
+  // Ignore if running in a restricted environment
+}
+
 console.log('Build complete:');
 console.log('  index.html       ->  dist/index.html (' + sizeKB + ' KB)');
 console.log('  notes/ (' + count + ' files) ->  dist/notes/ (Cloudflare Pages copy)');

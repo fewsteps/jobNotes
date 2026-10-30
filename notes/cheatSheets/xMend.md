@@ -2,11 +2,11 @@
 
 * **290:** Increase tax (+)
 * **291:** Decrease tax (-)
-* **160:** Increase FTF penalty (+)
-* **161:** Decrease FTF penalty (-)
-* **170:** Increase ES penalty (+)
+* **160:** Increase FTF penalty (+) [Failure to File penalty]
+* **161:** Decrease FTF penalty (-) [Estimated Tax penalty]
+* **170:** Increase ES penalty (+) 
 * **171:** Decrease ES penalty (-)
-* **270:** Increase FTP penalty (+) [- freeze]
+* **270:** Increase FTP penalty (+) [- freeze] [Failure to Pay penalty = underpaying estimated quarterly tax payments]
 * **271:** Decrease FTP penalty (-) [- freeze]
 * **340:** Increase debit interest (+) [- freeze]
 * **341:** Decrease debit interest (-) [- freeze]

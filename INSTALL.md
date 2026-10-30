@@ -1,179 +1,47 @@
-# Installation & Deployment Guide
+# Install & Deploy Guide
 
-This guide walks you through setting up **KB Studio (jobNotes)** locally and deploying it to **GitHub Pages** or **Cloudflare Pages**.
+## 1. Daily Usage (Adding or Editing Notes)
 
----
+Put your `.md` files inside the **`notes/`** folder (you can create any subfolders inside `notes/`).
 
-## Table of Contents
-
-1. [Prerequisites & Browser Requirements](#1-prerequisites--browser-requirements)
-2. [Local Setup](#2-local-setup)
-3. [Deploying to GitHub Pages](#3-deploying-to-github-pages)
-4. [Deploying to Cloudflare Pages](#4-deploying-to-cloudflare-pages)
-   - [Method 1: Direct CLI Deploy (Wrangler)](#method-1-direct-cli-deploy-wrangler)
-   - [Method 2: Git Integration (Cloudflare Dashboard)](#method-2-git-integration-cloudflare-dashboard)
-5. [Browser Compatibility & Troubleshooting](#5-browser-compatibility--troubleshooting)
-6. [Quick Reference Commands](#6-quick-reference-commands)
-
----
-
-## 1. Prerequisites & Browser Requirements
-
-### System Requirements
-- **Node.js** (v18 or higher recommended) and **npm** installed.
-- **Git** installed and authenticated with your GitHub account.
-
-### Browser Requirement (Crucial)
-KB Studio is a local-first application that reads and writes Markdown files on your computer using the **File System Access API**.
-- **Supported out of the box:** Google Chrome (v86+), Microsoft Edge (v86+).
-- **Brave Browser:** Requires enabling `brave://flags/#file-system-access-api` (see [Troubleshooting](#5-browser-compatibility--troubleshooting)).
-- **HTTPS or Localhost is required:** The File System Access API will only operate in a **Secure Context** (`https://`, `http://localhost`, or `file://`).
-
----
-
-## 2. Local Setup
-
-### Step 1: Clone the Repository
+### Publish to GitHub Pages
+Just commit and push — it updates automatically:
 ```bash
-git clone https://github.com/fewsteps/jobNotes.git
-cd jobNotes
+git add .
+git commit -m "update notes"
+git push
 ```
+Live URL: `https://fewsteps.github.io/jobNotes/`
 
-### Step 2: Install Dependencies
-Install development tools (Wrangler CLI for Cloudflare deployments):
-```bash
-npm install
-```
-
-### Single-File Structure & Always-Mapped `notes/` Folder
-The entire app lives in **`index.html`** with an always-mapped **`notes/`** folder:
-- **`notes/` Folder:** Saved in both GitHub (committed to repo) and Cloudflare (`dist/notes/`). These markdown notes (`README.md`, `daily-notes/`, `solutions/`, `templates/`) are always visible in the explorer sidebar.
-- **Local Configured Folder:** When you select your local folder, it appears right alongside the `notes/` folder in the sidebar.
-- **GitHub Pages:** Directly serves `index.html` and `notes/` from the root whenever you commit & push.
-- **Cloudflare Pages:** Deploys via `npm run deploy` (automatically bundles `index.html` and copies `notes/` to `dist/`).
-
-### Step 3: Run Locally (Testing)
-You can run the app locally using any static web server:
-```bash
-# Using npx serve:
-npx serve .
-
-# Or using Python:
-python3 -m http.server 8080
-```
-Open your browser at `http://localhost:3000` (or `http://localhost:8080`).
-
----
-
-## 3. Deploying to GitHub Pages
-
-GitHub Pages serves static files directly from your repository over HTTPS.
-
-### Option A: Deploy from Branch (Recommended & Quickest)
-
-Because `index.html` is already present in the root directory:
-
-1. Push your latest changes to GitHub:
-   ```bash
-   git add .
-   git commit -m "Update site"
-   git push origin main
-   ```
-2. Open your repository on GitHub:
-   `https://github.com/fewsteps/jobNotes`
-3. Go to **Settings** &rarr; **Pages** (under the "Code and automation" sidebar section).
-4. Under **Build and deployment**:
-   - **Source:** Select `Deploy from a branch`.
-   - **Branch:** Select `main` and folder `/ (root)`.
-   - Click **Save**.
-5. After 1–2 minutes, your site will be live at:
-   ```text
-   https://fewsteps.github.io/jobNotes/
-   ```
-
-Every time you edit `index.html` and commit/push to `main`, GitHub Pages automatically updates!
-
----
-
-## 4. Deploying to Cloudflare Pages
-
-Cloudflare Pages offers fast worldwide CDN hosting, automatic HTTPS, and preview deployments.
-
-### Method 1: Direct CLI Deploy (Wrangler)
-
-The repository comes pre-configured with deploy scripts in `package.json` pointing to project `fewstepsonline`.
-
-#### 1. One-time Authentication
-Log in to your Cloudflare account from your terminal:
-```bash
-npx wrangler login
-```
-Verify your login:
-```bash
-npm run whoami
-```
-
-#### 2. Deploy to Production
-Run the deploy command (this automatically builds to `dist/` first, then uploads):
+### Publish to Cloudflare Pages
+Run one command:
 ```bash
 npm run deploy
 ```
-*(If you want to deploy to a different Cloudflare project name, edit `--project-name <your-project>` in `package.json`)*.
 
-#### 3. Deploy a Preview Branch
-To test without affecting production:
+---
+
+## 2. First-Time Setup (On a New Computer)
+
 ```bash
-npm run deploy:preview
+git clone https://github.com/fewsteps/jobNotes.git
+cd jobNotes
+npm install
+```
+
+**Cloudflare Login (One-Time Only):**
+```bash
+npx wrangler login
 ```
 
 ---
 
-### Method 2: Git Integration (Cloudflare Dashboard)
+## 3. Brave Browser Tip (Optional — For Local Disk Folders)
 
-If you prefer Cloudflare to automatically rebuild and deploy on every `git push`:
+Viewing and searching `notes/` works in **all browsers** automatically.  
+If you use **Brave** and want to connect an extra local folder from your computer (`Select Local Folder` button):
+1. Open `brave://flags/#file-system-access-api`
+2. Set it to **Enabled** and click **Relaunch**.
 
-1. Go to the [Cloudflare Dashboard](https://dash.cloudflare.com/) and navigate to **Workers & Pages**.
-2. Click **Create application** &rarr; **Pages** &rarr; **Connect to Git**.
-3. Select your GitHub account and pick the `jobNotes` repository.
-4. Configure your build settings:
-   - **Framework preset:** `None`
-   - **Build command:** `npm run build`
-   - **Build output directory:** `dist`
-   - **Root directory:** `/`
-5. Click **Save and Deploy**.
 
-Cloudflare will automatically build and deploy every time you push commits to `main`.
-
----
-
-## 5. Browser Compatibility & Troubleshooting
-
-### Browser Compatibility & Local Folder Connection
-
-- **Reading & Managing Notes (All Modern Browsers):**
-  Viewing, searching, editing, and managing your shared `notes/` works in **all modern browsers** (Google Chrome, Microsoft Edge, Brave, Safari, Firefox) via built-in browser storage and HTTPS sync.
-- **Connecting a Local Disk Folder (Chrome / Edge / Brave):**
-  Direct local disk folder access uses the Chromium **File System Access API**.
-  - **Google Chrome & Microsoft Edge:** Supported out of the box.
-  - **Brave Browser:** Brave disables local disk access by default for privacy reasons. To enable:
-    1. In Brave, go to: `brave://flags/#file-system-access-api`
-    2. Change the dropdown setting to **Enabled**.
-    3. Click **Relaunch** at the bottom of the screen.
-    4. Refresh your KB Studio tab.
-  - **Firefox & Safari:** Do not implement the local File System Access API. On these browsers, you can still view, search, and edit your notes in browser storage.
-- **Secure Context Required:**
-  Browsers require a Secure Context (`https://`, `http://localhost`, or `file://`) to access local folders. GitHub Pages (`https://`) and Cloudflare Pages (`https://`) provide HTTPS automatically.
-
----
-
-## 6. Quick Reference Commands
-
-| Command | Action |
-|---|---|
-| `npm run build` | Copies `index.html` &rarr; `dist/index.html` (for Cloudflare) |
-| `npm run deploy` | Builds and deploys production build to Cloudflare Pages |
-| `npm run deploy:preview` | Builds and deploys preview branch to Cloudflare Pages |
-| `npx wrangler login` | Authenticates your local CLI with Cloudflare |
-| `npm run whoami` | Checks active Cloudflare credentials |
-| `git push origin main` | Pushes changes to trigger GitHub Pages update |
-
+/private/tmp/pdf_pages/all_vision.txt
