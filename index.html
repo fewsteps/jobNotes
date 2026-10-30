@@ -2048,7 +2048,7 @@ function filterTree(val){renderTree();}
 // =========================================================
 // REFRESH / COLLAPSE
 // =========================================================
-async function refreshTree(){await syncRemoteNotes();await renderTree();notify('File tree refreshed');}
+async function refreshTree(){await syncRemoteNotes();await renderTree();await reloadOpenFiles();notify('File tree & open notes refreshed');}
 function collapseAll(){document.querySelectorAll('.tree-folder-children.open').forEach(function(el){el.classList.remove('open');});}
 
 // =========================================================
